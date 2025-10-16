@@ -1,25 +1,56 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-import { ExportSection, NodeContent } from '../types';
+import { ExportSection, NodeContent, NodeType, TableContent, QuizContent } from '../types';
 import { CloseIcon } from './icons';
 import SmallLoadingSpinner from './SmallLoadingSpinner';
 import { useStore } from '../store';
 
-const formatContentForPreview = (content: string | NodeContent): string => {
+const formatContentForPreview = (content: ExportSection['content'], nodeType: NodeType): string => {
     if (typeof content === 'string') return content.replace(/\n/g, '<br/>');
-    return content.map(item => {
-        switch(item.type) {
-            case 'heading': return `<h3 class="text-lg font-semibold mt-2 text-foreground">${item.content}</h3>`;
-            case 'bullet': return `<li class="ml-4 list-disc">${item.content}</li>`;
-            case 'paragraph': return `<p class="my-1">${item.content}</p>`;
-            default: return '';
-        }
-    }).join('');
+    
+    switch(nodeType) {
+        case 'table':
+            const table = content as TableContent;
+            if (!table || !table.headers || !table.rows) return '<p>Invalid table data</p>';
+            let tableHtml = '<table class="w-full my-2 border-collapse text-sm"><thead><tr class="border-b-2 border-border">';
+            table.headers.forEach(h => tableHtml += `<th class="p-2 text-left font-semibold">${h}</th>`);
+            tableHtml += '</tr></thead><tbody>';
+            table.rows.forEach(row => {
+                tableHtml += '<tr class="border-b border-border/50">';
+                row.forEach(cell => tableHtml += `<td class="p-2">${cell}</td>`);
+                tableHtml += '</tr>';
+            });
+            tableHtml += '</tbody></table>';
+            return tableHtml;
+        case 'quiz':
+            const quiz = content as QuizContent;
+            if (!quiz || !Array.isArray(quiz)) return '<p>Invalid quiz data</p>';
+            return quiz.map((q, i) => {
+                let text = `<p class="font-semibold mt-3">${i + 1}. ${q.question}</p>`;
+                if (q.type === 'multiple-choice' && q.options) {
+                    text += '<ul class="list-none pl-4 mt-1">';
+                    q.options.forEach(opt => text += `<li class="py-0.5">- ${opt}</li>`);
+                    text += '</ul>';
+                }
+                return text;
+            }).join('');
+        case 'text':
+        default:
+            const textContent = content as NodeContent;
+            if (!textContent || !Array.isArray(textContent)) return '';
+            return textContent.map(item => {
+                switch(item.type) {
+                    case 'heading': return `<h3 class="text-lg font-semibold mt-2 text-foreground">${item.content}</h3>`;
+                    case 'bullet': return `<li class="ml-4 list-disc">${item.content}</li>`;
+                    case 'paragraph': return `<p class="my-1">${item.content}</p>`;
+                    default: return '';
+                }
+            }).join('');
+    }
 };
 
 const ExportModal: React.FC = () => {
-  // Fix: Correctly destructure `exportSections` and `setExportSections` from the store and alias them.
   const { 
     exportSections: sections,
     setExportSections: setSections,
@@ -73,8 +104,8 @@ const ExportModal: React.FC = () => {
     const pdfHeight = pdf.internal.pageSize.getHeight();
     const imgWidth = canvas.width;
     const imgHeight = canvas.height;
-    const ratio = imgWidth / imgHeight;
-    let finalImgHeight = pdfWidth / ratio;
+    const ratio = imgHeight / imgWidth;
+    let finalImgHeight = pdfWidth * ratio;
     
     let heightLeft = finalImgHeight;
     let position = 0;
@@ -83,7 +114,7 @@ const ExportModal: React.FC = () => {
     heightLeft -= pdfHeight;
 
     while (heightLeft > 0) {
-      position = heightLeft - finalImgHeight;
+      position = - (finalImgHeight - heightLeft);
       pdf.addPage();
       pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, finalImgHeight);
       heightLeft -= pdfHeight;
@@ -138,7 +169,7 @@ const ExportModal: React.FC = () => {
                   {sections.filter(s => s.enabled).map(s => (
                     <div key={s.id} className="mb-6">
                         <h2 className="text-2xl font-bold text-foreground mb-2 pb-1 border-b border-border/50">{s.title}</h2>
-                        <div className="prose prose-sm dark:prose-invert" dangerouslySetInnerHTML={{ __html: formatContentForPreview(s.content) }} />
+                        <div className="prose prose-sm dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: formatContentForPreview(s.content, s.nodeType) }} />
                     </div>
                   ))}
                 </div>

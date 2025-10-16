@@ -1,10 +1,12 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
-import { NodeData, Position, ActionType, NodeContent } from '../types';
+import { NodeData, Position, ActionType, NodeContent, TableContent, QuizContent } from '../types';
 import { PlusIcon } from './icons';
 import ActionMenu from './ActionMenu';
 import LoadingSpinner from './LoadingSpinner';
 import { NODE_HEIGHT, NODE_SPACING, NODE_WIDTH } from '../constants';
 import { useStore } from '../store';
+import TableView from './TableView';
+import QuizView from './QuizView';
 
 interface NodeProps {
   data: NodeData;
@@ -39,9 +41,13 @@ const Node: React.FC<NodeProps> = ({ data }) => {
   const [menu, setMenu] = useState<MenuState & { relativePosition: Position }>({ visible: false, position: {x:0, y:0}, relativePosition: {x:0, y:0} });
 
   useEffect(() => {
+    if (data.nodeType !== 'text') return;
+
     const justFinishedLoading = wasLoading.current && !data.isLoading;
 
-    if (justFinishedLoading && data.content && typeof data.content !== 'string') {
+    // FIX: The condition to check for quiz content was flawed and caused a type error.
+    // This new condition correctly identifies text content (NodeContent) and excludes other types like QuizContent.
+    if (justFinishedLoading && data.content && Array.isArray(data.content) && (data.content.length === 0 || 'content' in data.content[0])) {
         setDisplayedContent([]); // Reset to start animation
         const contentArray = data.content as NodeContent;
         
@@ -59,22 +65,18 @@ const Node: React.FC<NodeProps> = ({ data }) => {
         // If not loading (e.g., initial render of existing node), show full content immediately
         if (typeof data.content === 'string') {
             setDisplayedContent([{type: 'paragraph', content: data.content}]);
-        } else {
+        } else if (data.nodeType === 'text') {
             setDisplayedContent(data.content as NodeContent);
         }
     }
 
     wasLoading.current = data.isLoading;
-  }, [data.isLoading, data.content]);
+  }, [data.isLoading, data.content, data.nodeType]);
 
 
   useLayoutEffect(() => {
     if (cardRef.current && !isResizing && !data.isLoading) {
-        // Measure the height required by the content
         const contentHeight = cardRef.current.scrollHeight;
-        
-        // Only grow the card automatically to fit content, don't shrink it.
-        // Shrinking is a manual user action via the resize handle.
         if (contentHeight > data.height) {
              updateNodeSize(data.id, { width: data.width, height: contentHeight });
         }
@@ -89,12 +91,12 @@ const Node: React.FC<NodeProps> = ({ data }) => {
   };
   
   useEffect(() => {
-    if (data.isEditing) {
+    if (data.isEditing && data.nodeType === 'text') {
       let textContent = '';
       if (typeof data.content === 'string') {
         textContent = data.content;
       } else {
-        textContent = data.content.map(item => {
+        textContent = (data.content as NodeContent).map(item => {
           if (item.type === 'heading') return `**${item.content}**`;
           if (item.type === 'bullet') return `- ${item.content}`;
           return item.content;
@@ -106,7 +108,7 @@ const Node: React.FC<NodeProps> = ({ data }) => {
         resizeTextarea();
       }, 0);
     }
-  }, [data.isEditing, data.content]);
+  }, [data.isEditing, data.content, data.nodeType]);
   
   useEffect(() => {
     if (!menu.visible) return;
@@ -120,7 +122,7 @@ const Node: React.FC<NodeProps> = ({ data }) => {
   }, [menu.visible]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (data.isEditing || isResizing || (e.target as HTMLElement).closest('.node-content, .node-content-display, textarea, button, .resize-handle')) return;
+    if (data.isEditing || isResizing || (e.target as HTMLElement).closest('.node-content, .node-content-display, textarea, button, .resize-handle, table, input, label')) return;
     setIsDragging(true);
     dragStartPos.current = { x: e.clientX - data.position.x, y: e.clientY - data.position.y };
     e.stopPropagation();
@@ -174,7 +176,11 @@ const Node: React.FC<NodeProps> = ({ data }) => {
   }, [isResizing, handleResizeMouseMove, handleResizeMouseUp]);
   
   const handleContentBlur = () => updateNodeContent(data.id, editableContent);
-  const handleContentClick = () => toggleNodeEditing(data.id, true);
+  const handleContentClick = () => {
+    if (data.nodeType === 'text') {
+        toggleNodeEditing(data.id, true);
+    }
+  };
   
   const handleActionSelect = (action: ActionType) => {
       if (action === ActionType.REGENERATE) {
@@ -190,7 +196,7 @@ const Node: React.FC<NodeProps> = ({ data }) => {
     e.stopPropagation();
     let menuPos: Position = {x:0, y:0};
     let relativeNodePos: Position = {x:0, y:0};
-    const { width, height } = nodeRef.current!.getBoundingClientRect();
+    const { height } = nodeRef.current!.getBoundingClientRect();
     
     const MENU_WIDTH = 256;
     const MENU_MAX_HEIGHT = 240;
@@ -229,20 +235,37 @@ const Node: React.FC<NodeProps> = ({ data }) => {
         return <div className="absolute inset-0 bg-card/75 flex items-center justify-center rounded-lg"><LoadingSpinner /></div>;
     }
 
-    const contentToRender = displayedContent || [];
+    const contentWrapperClass = "node-content-display text-base text-card-foreground flex-grow overflow-y-auto";
 
-    return (
-        <div className="node-content-display text-base text-card-foreground flex-grow overflow-y-auto cursor-text space-y-2" onClick={handleContentClick}>
-            {contentToRender.map((item, index) => {
-                switch(item.type) {
-                    case 'heading': return <h4 key={index} className="text-md font-bold text-card-foreground">{item.content}</h4>;
-                    case 'bullet': return <li key={index} className="ml-4 list-disc">{item.content}</li>;
-                    case 'paragraph': return <p key={index}>{item.content}</p>;
-                    default: return null;
-                }
-            })}
-        </div>
-    );
+    switch (data.nodeType) {
+        case 'table':
+            return (
+                <div className={`${contentWrapperClass} cursor-default`} onClick={(e) => e.stopPropagation()}>
+                    <TableView content={data.content as TableContent} />
+                </div>
+            );
+        case 'quiz':
+            return (
+                <div className={`${contentWrapperClass} cursor-default space-y-2`} onClick={(e) => e.stopPropagation()}>
+                    <QuizView content={data.content as QuizContent} />
+                </div>
+            );
+        case 'text':
+        default:
+            const contentToRender = displayedContent || [];
+            return (
+                <div className={`${contentWrapperClass} cursor-text space-y-2`} onClick={handleContentClick}>
+                    {contentToRender.map((item, index) => {
+                        switch(item.type) {
+                            case 'heading': return <h4 key={index} className="text-md font-bold text-card-foreground">{item.content}</h4>;
+                            case 'bullet': return <li key={index} className="ml-4 list-disc">{item.content}</li>;
+                            case 'paragraph': return <p key={index}>{item.content}</p>;
+                            default: return null;
+                        }
+                    })}
+                </div>
+            );
+    }
   };
 
   return (
@@ -250,7 +273,7 @@ const Node: React.FC<NodeProps> = ({ data }) => {
         <div ref={cardRef} className="relative w-full h-full p-4 bg-card border-2 border-border rounded-lg shadow-lg flex flex-col transition-all duration-200 hover:border-ring">
             <h3 className="text-lg font-bold text-card-foreground pb-2 border-b border-border mb-2 flex-shrink-0">{data.title}</h3>
             
-            {data.isEditing ? (
+            {data.isEditing && data.nodeType === 'text' ? (
                  <textarea ref={textareaRef} value={editableContent} onChange={(e) => setEditableContent(e.target.value)} onBlur={handleContentBlur} onInput={resizeTextarea} className="node-content text-base text-card-foreground flex-grow bg-transparent w-full resize-none focus:outline-none" onClick={(e) => e.stopPropagation()} />
             ) : renderContent()}
 

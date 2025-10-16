@@ -3,12 +3,27 @@ export interface Position {
   y: number;
 }
 
+export type NodeType = 'text' | 'table' | 'quiz';
+
 export type NodeContentItem = {
   type: 'heading' | 'bullet' | 'paragraph';
   content: string;
 };
 
 export type NodeContent = NodeContentItem[];
+
+export type TableContent = {
+    headers: string[];
+    rows: string[][];
+};
+
+export type QuizQuestion = {
+    question: string;
+    type: 'multiple-choice' | 'short-answer';
+    options?: string[];
+};
+export type QuizContent = QuizQuestion[];
+
 
 export enum ActionType {
   EXPAND_IDEA = 'Expand or Refine Idea',
@@ -35,7 +50,8 @@ export enum ActionType {
 export interface NodeData {
   id: string;
   title: string;
-  content: string | NodeContent;
+  content: string | NodeContent | TableContent | QuizContent;
+  nodeType: NodeType;
   position: Position;
   parentId: string | null;
   isEditing: boolean;
@@ -50,9 +66,10 @@ export type ExportSectionStatus = 'included' | 'missing' | 'generated' | 'genera
 export interface ExportSection {
   id: string;
   title: ActionType | string;
-  content: string | NodeContent;
+  content: string | NodeContent | TableContent | QuizContent;
   status: ExportSectionStatus;
   enabled: boolean;
+  nodeType: NodeType;
 }
 
 export type Theme = 'light' | 'dark';

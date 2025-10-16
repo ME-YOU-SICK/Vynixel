@@ -3,7 +3,7 @@ import { ActionType, NodeContent } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
-const responseSchema = {
+const textResponseSchema = {
     type: Type.ARRAY,
     items: {
         type: Type.OBJECT,
@@ -22,6 +22,57 @@ const responseSchema = {
     }
 };
 
+const tableResponseSchema = {
+    type: Type.OBJECT,
+    properties: {
+        headers: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING },
+            description: 'The column headers for the table.'
+        },
+        rows: {
+            type: Type.ARRAY,
+            items: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING }
+            },
+            description: 'The rows of the table, where each row is an array of strings.'
+        }
+    },
+    required: ['headers', 'rows']
+};
+
+const quizResponseSchema = {
+    type: Type.ARRAY,
+    items: {
+        type: Type.OBJECT,
+        properties: {
+            question: {
+                type: Type.STRING,
+                description: 'The question text.'
+            },
+            type: {
+                type: Type.STRING,
+                enum: ['multiple-choice', 'short-answer'],
+                description: 'The type of question.'
+            },
+            options: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+                description: 'An array of possible answers for multiple-choice questions.'
+            }
+        },
+        required: ['question', 'type']
+    }
+};
+
+const actionToSchemaMap = {
+    [ActionType.DEFINE_MONETIZATION_MODEL]: tableResponseSchema,
+    [ActionType.SUGGEST_TECH_STACK]: tableResponseSchema,
+    [ActionType.VALIDATE_IDEA]: quizResponseSchema,
+};
+
+
 function getPromptForAction(idea: string, action: ActionType): string {
   const basePrompt = `You are an expert startup consultant. Based on the following startup idea: "${idea}"\n\n`;
   const instruction = `Generate content for the action: "${action}".`;
@@ -30,7 +81,7 @@ function getPromptForAction(idea: string, action: ActionType): string {
     case ActionType.EXPAND_IDEA:
       return `${basePrompt}Expand and refine this idea. Describe the core value proposition, key features, and what makes it unique.`;
     case ActionType.VALIDATE_IDEA:
-      return `${basePrompt}Provide a validation plan. What are the key assumptions to test? Suggest simple, low-cost experiments (like landing pages, surveys, or smoke tests) to validate product-market fit.`;
+      return `${basePrompt}Provide a validation plan as an interactive quiz. Create 3-4 critical questions (a mix of multiple-choice and short-answer) to force the founder to test their key assumptions about the problem, solution, and customer. The goal is active validation, not passive reading.`;
     case ActionType.DEFINE_PROBLEM:
       return `${basePrompt}Clearly define the core problem this startup is solving. Who is experiencing this problem? What are the pain points? Why are existing solutions inadequate?`;
     case ActionType.IDENTIFY_TARGET_USERS:
@@ -44,7 +95,7 @@ function getPromptForAction(idea: string, action: ActionType): string {
     case ActionType.DEFINE_MVP:
       return `${basePrompt}Define the Minimum Viable Product (MVP). What is the absolute smallest set of features needed to solve the core problem for early adopters? Prioritize features using a simple framework (e.g., MoSCoW method).`;
     case ActionType.SUGGEST_TECH_STACK:
-      return `${basePrompt}Suggest a suitable technology stack for building the MVP. Recommend a frontend framework, backend language/framework, database, and potential cloud hosting provider. Justify your choices briefly based on scalability, development speed, and talent availability.`;
+        return `${basePrompt}Suggest a suitable technology stack for building the MVP. Present this as a table with columns: 'Category' (e.g., Frontend, Backend, Database), 'Technology', and 'Justification'. Justify your choices briefly based on scalability, development speed, and talent availability.`;
     case ActionType.GENERATE_PROJECT_STRUCTURE:
         return `${basePrompt}Based on the suggested tech stack (e.g., React, Node.js, PostgreSQL), generate a recommended project folder and file structure. Use a tree-like format to represent the directory layout and explain the purpose of key folders. Present as paragraphs and bullets.`;
     case ActionType.BUILD_SOCIAL_MEDIA_CAMPAIGN:
@@ -56,7 +107,7 @@ function getPromptForAction(idea: string, action: ActionType): string {
     case ActionType.GENERATE_FUNDING_ROADMAP:
         return `${basePrompt}Generate a potential funding roadmap. Describe the typical stages (Pre-seed, Seed, Series A), the key milestones to achieve for each stage, and the estimated capital to raise at each round.`;
     case ActionType.DEFINE_MONETIZATION_MODEL:
-        return `${basePrompt}Define and compare 3 potential monetization models for this startup (e.g., Subscription (SaaS), Freemium, Transactional, Marketplace Fee). For each model, list its pros and cons in the context of this specific idea.`;
+        return `${basePrompt}Define and compare 3 potential monetization models for this startup (e.g., Subscription, Freemium, Transactional). Present this as a table with columns: 'Model', 'Pros', and 'Cons'. The pros and cons should be in the context of this specific idea.`;
     case ActionType.MAP_GTM_PLAN:
         return `${basePrompt}Map out a detailed Go-To-Market (GTM) plan for the launch. Include target audience segmentation, value proposition, marketing channels, sales strategy, and key performance indicators (KPIs).`;
     case ActionType.GENERATE_TODO_LIST:
@@ -77,7 +128,7 @@ const generateJSON = async (prompt: string): Promise<NodeContent> => {
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,
-            config: { responseMimeType: "application/json", responseSchema }
+            config: { responseMimeType: "application/json", responseSchema: textResponseSchema }
         });
         return JSON.parse(response.text.trim()) as NodeContent;
     } catch (error) {
@@ -86,7 +137,7 @@ const generateJSON = async (prompt: string): Promise<NodeContent> => {
     }
 };
 
-export async function* generateContentStream(prompt: string): AsyncGenerator<string, void, unknown> {
+export async function* generateContentStream(prompt: string, schema: any): AsyncGenerator<string, void, unknown> {
     if (!process.env.API_KEY) {
         yield '{"error": "API Key not configured."}';
         return;
@@ -95,7 +146,7 @@ export async function* generateContentStream(prompt: string): AsyncGenerator<str
         const response = await ai.models.generateContentStream({
             model: 'gemini-2.5-flash',
             contents: prompt,
-            config: { responseMimeType: "application/json", responseSchema }
+            config: { responseMimeType: "application/json", responseSchema: schema }
         });
         for await (const chunk of response) {
             yield chunk.text;
@@ -108,17 +159,19 @@ export async function* generateContentStream(prompt: string): AsyncGenerator<str
 
 export const generateNodeContentStream = (parentContent: string, action: ActionType) => {
     const prompt = getPromptForAction(parentContent, action);
-    return generateContentStream(prompt);
+    const schema = actionToSchemaMap[action] || textResponseSchema;
+    return generateContentStream(prompt, schema);
 };
 
 export const generateCustomPromptContent = (parentContent: string, customPrompt: string) => {
     const prompt = `You are an expert startup consultant. Based on the following context: "${parentContent}"\n\nFulfill this request: "${customPrompt}"`;
-    return generateContentStream(prompt);
+    return generateContentStream(prompt, textResponseSchema);
 }
 
 export const generateMissingDocument = (context: string, missingAction: ActionType) => {
     const prompt = `You are a startup consultant synthesizing a business plan. You have the following context from an existing business plan:\n---\n${context}\n---\n\nBased on all the information above, generate the content for the following missing section: "${missingAction}". Make sure the new section is consistent with the provided context.`;
-    return generateContentStream(prompt);
+    const schema = actionToSchemaMap[missingAction] || textResponseSchema;
+    return generateContentStream(prompt, schema);
 };
 
 export const getBlueprintCritique = (context: string): Promise<NodeContent> => {

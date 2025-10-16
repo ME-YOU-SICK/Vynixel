@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { VynixelState, NodeData, ActionType, Position, NodeContent, ExportSection } from './types';
+import { VynixelState, NodeData, ActionType, Position, NodeContent, ExportSection, NodeType, TableContent, QuizContent } from './types';
 import { 
     generateNodeContentStream, 
     generateMissingDocument, 
@@ -8,28 +8,65 @@ import {
 } from './services/geminiService';
 import { initialActions, NODE_WIDTH, NODE_HEIGHT } from './constants';
 
-const formatNodeContentForExport = (content: string | NodeContent): string => {
-    if (typeof content === 'string') return content;
-    return content.map(item => {
-        switch(item.type) {
-            case 'heading': return `### ${item.content}\n`;
-            case 'bullet': return `* ${item.content}`;
-            case 'paragraph': return `${item.content}\n`;
-            default: return '';
-        }
-    }).join('\n');
+const getNodeTypeForAction = (action: ActionType): NodeType => {
+    switch (action) {
+        case ActionType.DEFINE_MONETIZATION_MODEL:
+        case ActionType.SUGGEST_TECH_STACK:
+            return 'table';
+        case ActionType.VALIDATE_IDEA:
+            return 'quiz';
+        default:
+            return 'text';
+    }
 };
 
-const parseStreamingText = (text: string): NodeContent => {
-    try {
-        const parsed = JSON.parse(text);
-        if (Array.isArray(parsed)) {
-            return parsed as NodeContent;
-        }
-    } catch (e) {
-        // Not valid JSON yet, treat as plain text
+const formatNodeContentForExport = (node: { content: NodeData['content'], nodeType: NodeType }): string => {
+    if (typeof node.content === 'string') return node.content;
+
+    switch(node.nodeType) {
+        case 'table':
+            const table = node.content as TableContent;
+            if (!table || !table.headers || !table.rows) return 'Table data is malformed.';
+            let markdown = `| ${table.headers.join(' | ')} |\n`;
+            markdown += `| ${table.headers.map(() => '---').join(' | ')} |\n`;
+            table.rows.forEach(row => {
+                markdown += `| ${row.join(' | ')} |\n`;
+            });
+            return markdown;
+        case 'quiz':
+            const quiz = node.content as QuizContent;
+            if (!quiz || !Array.isArray(quiz)) return 'Quiz data is malformed.';
+            return quiz.map((q, i) => {
+                let text = `${i + 1}. ${q.question}\n`;
+                if (q.type === 'multiple-choice' && q.options) {
+                    text += q.options.map(opt => `  - [ ] ${opt}`).join('\n');
+                } else {
+                    text += '\n____________________\n';
+                }
+                return text;
+            }).join('\n\n');
+        case 'text':
+        default:
+            const textContent = node.content as NodeContent;
+            if (!textContent || !Array.isArray(textContent)) return '';
+            return textContent.map(item => {
+                switch(item.type) {
+                    case 'heading': return `### ${item.content}\n`;
+                    case 'bullet': return `* ${item.content}`;
+                    case 'paragraph': return `${item.content}\n`;
+                    default: return '';
+                }
+            }).join('\n');
     }
-    return text.split('\n').filter(p => p.trim() !== '').map(p => ({type: 'paragraph', content: p}));
+};
+
+const parseContent = (text: string): any => {
+    try {
+        return JSON.parse(text);
+    } catch (e) {
+        console.warn("Failed to parse JSON, falling back to error message:", text, e);
+        return [{ type: 'paragraph', content: 'AI returned malformed content. Please try regenerating.' }];
+    }
 };
 
 
@@ -48,6 +85,7 @@ export const useStore = create<VynixelState>((set, get) => ({
             id: initialNodeId,
             title: 'Your Startup Idea',
             content: 'Describe your startup idea in a sentence or a short paragraph. For example: "A platform that uses AI to create personalized travel itineraries."',
+            nodeType: 'text',
             position: { x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 100 },
             parentId: null,
             isEditing: false,
@@ -69,7 +107,7 @@ export const useStore = create<VynixelState>((set, get) => ({
     updateNodeContent: (id, content) => set(state => {
         const newNodes = new Map(state.nodes);
         const node = newNodes.get(id);
-        if (node) {
+        if (node && node.nodeType === 'text') {
             const structuredContent: NodeContent = content.split('\n')
               .filter(line => line.trim() !== '')
               .map(line => ({ type: 'bullet', content: line.replace(/^- /, '') }));
@@ -101,13 +139,15 @@ export const useStore = create<VynixelState>((set, get) => ({
 
         const parentContentString = typeof parentNode.content === 'string' 
             ? parentNode.content 
-            : parentNode.content.map(item => item.content).join('\n');
+            : formatNodeContentForExport(parentNode);
 
         const newNodeId = `node_${Date.now()}`;
+        const nodeType = getNodeTypeForAction(action);
         const newNode: NodeData = {
             id: newNodeId,
             title: action,
             content: '',
+            nodeType: nodeType,
             position: { x: parentNode.position.x + relativePosition.x, y: parentNode.position.y + relativePosition.y },
             parentId: parentId,
             isEditing: false,
@@ -130,7 +170,7 @@ export const useStore = create<VynixelState>((set, get) => ({
                 const newNodes = new Map(state.nodes);
                 const node = newNodes.get(newNodeId);
                 if (node) {
-                    const finalContent = parseStreamingText(accumulatedText);
+                    const finalContent = parseContent(accumulatedText);
                     newNodes.set(newNodeId, { ...node, content: finalContent, isLoading: false, availableActions: initialActions });
                 }
                 return { nodes: newNodes };
@@ -143,7 +183,7 @@ export const useStore = create<VynixelState>((set, get) => ({
                 const node = newNodes.get(newNodeId);
                 if(node) {
                     const errorContent: NodeContent = [{ type: 'heading', content: 'Error'}, { type: 'paragraph', content: 'Failed to generate content.' }];
-                    newNodes.set(newNodeId, { ...node, content: errorContent, isLoading: false });
+                    newNodes.set(newNodeId, { ...node, content: errorContent, isLoading: false, nodeType: 'text' });
                 }
                 return { nodes: newNodes };
             });
@@ -159,18 +199,21 @@ export const useStore = create<VynixelState>((set, get) => ({
 
         const parentContentString = typeof parentNode.content === 'string' 
             ? parentNode.content 
-            : parentNode.content.map(item => item.content).join('\n');
+            : formatNodeContentForExport(parentNode);
+        
+        const action = nodeToRegenerate.title as ActionType;
+        const nodeType = getNodeTypeForAction(action);
 
         set(state => {
             const newNodes = new Map(state.nodes);
             const node = newNodes.get(nodeId);
-            if(node) newNodes.set(nodeId, {...node, isLoading: true, content: ''});
+            if(node) newNodes.set(nodeId, {...node, isLoading: true, content: '', nodeType: nodeType});
             return { nodes: newNodes };
         });
 
         let accumulatedText = "";
         try {
-            const stream = generateNodeContentStream(parentContentString, nodeToRegenerate.title as ActionType);
+            const stream = generateNodeContentStream(parentContentString, action);
              for await (const chunk of stream) {
                 accumulatedText += chunk;
             }
@@ -178,7 +221,7 @@ export const useStore = create<VynixelState>((set, get) => ({
                 const newNodes = new Map(state.nodes);
                 const node = newNodes.get(nodeId);
                 if (node) {
-                    const finalContent = parseStreamingText(accumulatedText);
+                    const finalContent = parseContent(accumulatedText);
                     newNodes.set(nodeId, { ...node, content: finalContent, isLoading: false });
                 }
                 return { nodes: newNodes };
@@ -190,7 +233,7 @@ export const useStore = create<VynixelState>((set, get) => ({
                 const node = newNodes.get(nodeId);
                 if(node) {
                     const errorContent: NodeContent = [{ type: 'heading', content: 'Error'}, { type: 'paragraph', content: 'Failed to regenerate content.' }];
-                    newNodes.set(nodeId, {...node, content: errorContent, isLoading: false});
+                    newNodes.set(nodeId, {...node, content: errorContent, isLoading: false, nodeType: 'text'});
                 }
                 return { nodes: newNodes };
             });
@@ -200,7 +243,7 @@ export const useStore = create<VynixelState>((set, get) => ({
     analyzeBlueprint: async () => {
         const { nodes } = get();
         const context = Array.from(nodes.values())
-            .map(n => `## ${n.title}\n\n${formatNodeContentForExport(n.content)}`)
+            .map(n => `## ${n.title}\n\n${formatNodeContentForExport(n)}`)
             .join('\n\n---\n\n');
         
         const rootNode = Array.from(nodes.values()).find(n => !n.parentId);
@@ -211,6 +254,7 @@ export const useStore = create<VynixelState>((set, get) => ({
             id: newNodeId,
             title: 'Critique & Suggestions',
             content: '',
+            nodeType: 'text',
             position: { x: rootNode.position.x - rootNode.width - 100, y: rootNode.position.y },
             parentId: null,
             isEditing: false,
@@ -234,7 +278,7 @@ export const useStore = create<VynixelState>((set, get) => ({
              set(state => {
                 const newNodes = new Map(state.nodes);
                 const node = newNodes.get(newNodeId);
-                if(node) newNodes.set(newNodeId, { ...node, content: 'Error during analysis.', isLoading: false });
+                if(node) newNodes.set(newNodeId, { ...node, content: 'Error during analysis.', isLoading: false, nodeType: 'text' });
                 return { nodes: newNodes };
             });
         }
@@ -260,13 +304,14 @@ export const useStore = create<VynixelState>((set, get) => ({
 
         const parentContentString = typeof parentNode.content === 'string'
             ? parentNode.content
-            : parentNode.content.map(item => item.content).join('\n');
+            : formatNodeContentForExport(parentNode);
         
         get().closeCustomPromptModal();
 
         const newNodeId = `node_${Date.now()}`;
         const newNode: NodeData = {
             id: newNodeId, title, content: '',
+            nodeType: 'text',
             position: { x: parentNode.position.x + relativePosition.x, y: parentNode.position.y + relativePosition.y },
             parentId, isEditing: false, isLoading: true, availableActions: initialActions,
             width: NODE_WIDTH, height: NODE_HEIGHT,
@@ -282,7 +327,7 @@ export const useStore = create<VynixelState>((set, get) => ({
             set(state => {
                 const newNodes = new Map(state.nodes);
                 const node = newNodes.get(newNodeId);
-                if (node) newNodes.set(newNodeId, { ...node, content: parseStreamingText(accumulatedText), isLoading: false });
+                if (node) newNodes.set(newNodeId, { ...node, content: parseContent(accumulatedText), isLoading: false });
                 return { nodes: newNodes };
             });
         } catch (error) {
@@ -290,7 +335,7 @@ export const useStore = create<VynixelState>((set, get) => ({
              set(state => {
                 const newNodes = new Map(state.nodes);
                 const node = newNodes.get(newNodeId);
-                if(node) newNodes.set(newNodeId, { ...node, content: 'Error generating content.', isLoading: false });
+                if(node) newNodes.set(newNodeId, { ...node, content: 'Error generating content.', isLoading: false, nodeType: 'text' });
                 return { nodes: newNodes };
             });
         }
@@ -308,12 +353,12 @@ export const useStore = create<VynixelState>((set, get) => ({
         const sections: ExportSection[] = allPossibleActions.map((actionTitle, index) => {
           const node = Array.from(nodes.values()).find(n => n.title === actionTitle);
           return node
-            ? { id: node.id, title: actionTitle, content: node.content, status: 'included', enabled: true }
-            : { id: `missing-${index}`, title: actionTitle, content: '', status: 'missing', enabled: false };
+            ? { id: node.id, title: actionTitle, content: node.content, status: 'included', enabled: true, nodeType: node.nodeType }
+            : { id: `missing-${index}`, title: actionTitle, content: '', status: 'missing', enabled: false, nodeType: getNodeTypeForAction(actionTitle) };
         });
 
         sections.unshift({
-          id: rootNode.id, title: rootNode.title, content: rootNode.content, status: 'included', enabled: true,
+          id: rootNode.id, title: rootNode.title, content: rootNode.content, status: 'included', enabled: true, nodeType: rootNode.nodeType,
         });
 
         set({ exportSections: sections, isExportModalOpen: true });
@@ -327,7 +372,7 @@ export const useStore = create<VynixelState>((set, get) => ({
         const { exportSections } = get();
         const context = exportSections
             .filter(s => s.enabled && s.status !== 'missing')
-            .map(s => `## ${s.title}\n\n${formatNodeContentForExport(s.content)}`)
+            .map(s => `## ${s.title}\n\n${formatNodeContentForExport(s)}`)
             .join('\n\n---\n\n');
 
         set(state => ({
@@ -340,14 +385,14 @@ export const useStore = create<VynixelState>((set, get) => ({
             for await (const chunk of stream) {
                 accumulatedText += chunk;
             }
-            const newContent = parseStreamingText(accumulatedText);
+            const newContent = parseContent(accumulatedText);
             set(state => ({
                 exportSections: state.exportSections.map(s => s.id === sectionToGenerate.id ? { ...s, content: newContent, status: 'generated', enabled: true } : s)
             }));
         } catch (error) {
             console.error("Failed to generate missing document:", error);
             set(state => ({
-                exportSections: state.exportSections.map(s => s.id === sectionToGenerate.id ? { ...s, status: 'missing', content: 'Error generating content.' } : s)
+                exportSections: state.exportSections.map(s => s.id === sectionToGenerate.id ? { ...s, status: 'missing', content: 'Error generating content.', nodeType: 'text' } : s)
             }));
         }
     },
