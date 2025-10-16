@@ -247,7 +247,7 @@ const Node: React.FC<NodeProps> = ({ data }) => {
         case 'quiz':
             return (
                 <div className={`${contentWrapperClass} cursor-default space-y-2`} onClick={(e) => e.stopPropagation()}>
-                    <QuizView content={data.content as QuizContent} />
+                    <QuizView content={data.content as QuizContent} nodeId={data.id} answers={data.answers} />
                 </div>
             );
         case 'text':

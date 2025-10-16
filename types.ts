@@ -59,6 +59,7 @@ export interface NodeData {
   availableActions: ActionType[];
   width: number;
   height: number;
+  answers?: { [key: number]: string };
 }
 
 export type ExportSectionStatus = 'included' | 'missing' | 'generated' | 'generating';
@@ -70,6 +71,7 @@ export interface ExportSection {
   status: ExportSectionStatus;
   enabled: boolean;
   nodeType: NodeType;
+  answers?: { [key: number]: string };
 }
 
 export type Theme = 'light' | 'dark';
@@ -84,6 +86,7 @@ export interface VynixelState {
     initializeNodes: () => void;
     updateNodePosition: (id: string, newPosition: Position) => void;
     updateNodeContent: (id: string, content: string) => void;
+    updateNodeAnswers: (id: string, answers: { [key: number]: string }) => void;
     updateNodeSize: (id: string, size: { width: number; height: number }) => void;
     toggleNodeEditing: (id: string, isEditing: boolean) => void;
     addNode: (parentId: string, action: ActionType, relativePosition: Position) => Promise<void>;

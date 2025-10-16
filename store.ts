@@ -20,7 +20,7 @@ const getNodeTypeForAction = (action: ActionType): NodeType => {
     }
 };
 
-const formatNodeContentForExport = (node: { content: NodeData['content'], nodeType: NodeType }): string => {
+const formatNodeContentForExport = (node: { content: NodeData['content'], nodeType: NodeType, answers?: { [key: number]: string } }): string => {
     if (typeof node.content === 'string') return node.content;
 
     switch(node.nodeType) {
@@ -35,13 +35,14 @@ const formatNodeContentForExport = (node: { content: NodeData['content'], nodeTy
             return markdown;
         case 'quiz':
             const quiz = node.content as QuizContent;
+            const answers = node.answers || {};
             if (!quiz || !Array.isArray(quiz)) return 'Quiz data is malformed.';
             return quiz.map((q, i) => {
                 let text = `${i + 1}. ${q.question}\n`;
                 if (q.type === 'multiple-choice' && q.options) {
-                    text += q.options.map(opt => `  - [ ] ${opt}`).join('\n');
+                    text += q.options.map(opt => `  - ${answers[i] === opt ? '[x]' : '[ ]'} ${opt}`).join('\n');
                 } else {
-                    text += '\n____________________\n';
+                    text += `\nAnswer: ${answers[i] || '____________________'}\n`;
                 }
                 return text;
             }).join('\n\n');
@@ -112,6 +113,15 @@ export const useStore = create<VynixelState>((set, get) => ({
               .filter(line => line.trim() !== '')
               .map(line => ({ type: 'bullet', content: line.replace(/^- /, '') }));
             newNodes.set(id, { ...node, content: structuredContent.length > 0 ? structuredContent : content, isEditing: false });
+        }
+        return { nodes: newNodes };
+    }),
+
+    updateNodeAnswers: (id, answers) => set(state => {
+        const newNodes = new Map(state.nodes);
+        const node = newNodes.get(id);
+        if (node && node.nodeType === 'quiz') {
+            newNodes.set(id, { ...node, answers });
         }
         return { nodes: newNodes };
     }),
@@ -353,7 +363,7 @@ export const useStore = create<VynixelState>((set, get) => ({
         const sections: ExportSection[] = allPossibleActions.map((actionTitle, index) => {
           const node = Array.from(nodes.values()).find(n => n.title === actionTitle);
           return node
-            ? { id: node.id, title: actionTitle, content: node.content, status: 'included', enabled: true, nodeType: node.nodeType }
+            ? { id: node.id, title: actionTitle, content: node.content, status: 'included', enabled: true, nodeType: node.nodeType, answers: node.answers }
             : { id: `missing-${index}`, title: actionTitle, content: '', status: 'missing', enabled: false, nodeType: getNodeTypeForAction(actionTitle) };
         });
 

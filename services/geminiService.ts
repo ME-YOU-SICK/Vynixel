@@ -74,46 +74,124 @@ const actionToSchemaMap = {
 
 
 function getPromptForAction(idea: string, action: ActionType): string {
-  const basePrompt = `You are an expert startup consultant. Based on the following startup idea: "${idea}"\n\n`;
-  const instruction = `Generate content for the action: "${action}".`;
+  const basePrompt = `You are a world-class startup consultant and product strategist. Your advice is sharp, actionable, and tailored. For the startup idea: "${idea}"\n\n`;
 
   switch (action) {
     case ActionType.EXPAND_IDEA:
-      return `${basePrompt}Expand and refine this idea. Describe the core value proposition, key features, and what makes it unique.`;
+      return `${basePrompt}Flesh out this concept into a clear "Idea Canvas". Structure your response with these headings:
+- **Core Value Proposition:** What is the single, most compelling promise to the customer?
+- **Key Features (Top 3):** Describe the three most critical features that deliver the value proposition.
+- **Secret Sauce:** What makes this idea unique and difficult to copy?
+- **Target Audience:** Who is the ideal early adopter?`;
+
     case ActionType.VALIDATE_IDEA:
-      return `${basePrompt}Provide a validation plan as an interactive quiz. Create 3-4 critical questions (a mix of multiple-choice and short-answer) to force the founder to test their key assumptions about the problem, solution, and customer. The goal is active validation, not passive reading.`;
+      return `${basePrompt}Create an "Assumption Validation Quiz" to help the founder critically assess their idea. The goal is to identify the riskiest assumptions. Generate 4 critical questions, mixing multiple-choice and short-answer formats, that challenge the founder on:
+1.  The existence and severity of the problem.
+2.  The effectiveness of their proposed solution.
+3.  Their ability to reach the target customer.
+4.  The customer's willingness to pay.
+Frame the questions to be thought-provoking and direct.`;
+
     case ActionType.DEFINE_PROBLEM:
-      return `${basePrompt}Clearly define the core problem this startup is solving. Who is experiencing this problem? What are the pain points? Why are existing solutions inadequate?`;
+      return `${basePrompt}Create a "Problem Statement Canvas". Clearly define the problem space using these headings:
+- **The Problem:** Describe the core problem in 1-2 sentences.
+- **Target Customer:** Who experiences this problem most acutely? Be specific.
+- **Current Pains & Workarounds:** What are their specific pain points? How do they try to solve it now (and why does it fail)?
+- **Emotional Impact:** What is the emotional cost of this problem for the customer?`;
+
     case ActionType.IDENTIFY_TARGET_USERS:
-      return `${basePrompt}Identify and describe the primary and secondary target user segments for this idea. What are their demographics, needs, and behaviors? Create a brief proto-persona for the primary segment.`;
+      return `${basePrompt}Define the "Ideal Customer Profile". Break down the target audience with these headings:
+- **Primary Segment (Early Adopters):** Describe the single group of users who will get the most value, most quickly.
+- **Secondary Segment (Growth Market):** Who is the next logical group to target after initial success?
+- **Proto-Persona:** Create a brief, actionable profile of the primary user, including their main goal, a key demographic fact, and their biggest frustration related to this problem.`;
+
     case ActionType.MAP_USER_PERSONAS:
-      return `${basePrompt}Create 2-3 detailed user personas for the primary target audience. For each persona, include their name, role, goals, motivations, and frustrations related to the problem space. Use headings for each persona.`;
+      return `${basePrompt}Create two distinct and detailed user personas. For each persona, use these headings:
+- **Persona Name & Photo Descriptor:** (e.g., "Sarah the Startup Marketer", "A photo of a woman in her late 20s at a busy co-working space").
+- **Role & Demographics:** Their job, age, and key characteristics.
+- **Goals:** What are they trying to achieve related to the problem?
+- **Frustrations:** What's getting in their way?
+- **A Day in Their Life:** Briefly describe a scenario where they encounter the problem.`;
+
     case ActionType.CREATE_USER_JOURNEY:
-      return `${basePrompt}Map out a typical user journey. Describe the key stages: Awareness, Consideration, Decision, Service, and Loyalty. For each stage, list the user's goals, actions, and touchpoints with the product.`;
+      return `${basePrompt}Map a high-level "Customer Journey" from discovery to advocacy. Use these stages as headings:
+- **Awareness:** How does a user first learn about the solution?
+- **Consideration:** What do they do to evaluate it against alternatives?
+- **Conversion:** What is the key action they take to become a user?
+- **Retention:** What makes them come back and use the product regularly?
+- **Advocacy:** What would motivate them to tell others about it?
+For each stage, list the user's key action and one opportunity for the startup to excel.`;
+
     case ActionType.DRAFT_PRD:
-      return `${basePrompt}Draft a high-level Product Requirements Document (PRD). Include an introduction, goals, success metrics, and a list of key features with user stories (e.g., "As a [user], I want to [action], so that [benefit]").`;
+      return `${basePrompt}Draft a concise, high-level Product Requirements Document (PRD). Use these headings:
+- **Objective:** What is the goal of this product/feature set?
+- **Success Metrics:** How will you know you've succeeded? (List 2-3 KPIs).
+- **User Stories (Epics):** List 3-5 high-level user stories in the format "As a [user], I want to [action], so that [benefit]".
+- **Features Out of Scope:** What are you explicitly NOT building for the initial release? This is critical for focus.`;
+
     case ActionType.DEFINE_MVP:
-      return `${basePrompt}Define the Minimum Viable Product (MVP). What is the absolute smallest set of features needed to solve the core problem for early adopters? Prioritize features using a simple framework (e.g., MoSCoW method).`;
+      return `${basePrompt}Define the Minimum Viable Product (MVP) with extreme focus. Use these headings:
+- **Core User Loop:** Describe the single, most important action/loop a user must complete to get value. (e.g., "Post photo -> Get feedback").
+- **MVP Feature Set:** List the absolute minimum features required to enable this core loop.
+- **"Not-Doing" List:** What popular but non-essential features are being intentionally excluded?
+- **Success Criteria:** What is the one metric that proves the MVP is successful?`;
+
     case ActionType.SUGGEST_TECH_STACK:
-        return `${basePrompt}Suggest a suitable technology stack for building the MVP. Present this as a table with columns: 'Category' (e.g., Frontend, Backend, Database), 'Technology', and 'Justification'. Justify your choices briefly based on scalability, development speed, and talent availability.`;
+      return `${basePrompt}Suggest a pragmatic technology stack for the MVP. Prioritize speed of development and scalability for a small team. Present this as a table with columns: 'Layer' (e.g., Frontend, Backend, Database, Deployment), 'Technology', and 'Justification & Risk'. The justification should explain why it's a good fit for this specific idea, and the risk should mention a potential drawback.`;
+
     case ActionType.GENERATE_PROJECT_STRUCTURE:
-        return `${basePrompt}Based on the suggested tech stack (e.g., React, Node.js, PostgreSQL), generate a recommended project folder and file structure. Use a tree-like format to represent the directory layout and explain the purpose of key folders. Present as paragraphs and bullets.`;
+      return `${basePrompt}Generate a logical project folder structure for the suggested tech stack. Present it as a nested bullet point list (markdown-style tree) and provide a one-sentence explanation for each top-level directory. For example:
+- \`/src\`: Main application source code.
+  - \`/components\`: Reusable UI components.
+  - \`/pages\`: Page-level components.`;
+
     case ActionType.BUILD_SOCIAL_MEDIA_CAMPAIGN:
-        return `${basePrompt}Outline a social media campaign map for the launch. Identify 2-3 key platforms. For each platform, define content pillars, suggest 3 sample post ideas, and recommend key metrics (KPIs) to track.`;
+      return `${basePrompt}Outline a "Launch Social Media Campaign" plan. Structure it with these headings:
+- **Recommended Platform:** Choose the single best platform to reach the target audience and explain why.
+- **Brand Voice:** Describe the tone in 3 words (e.g., "Witty, Helpful, Bold").
+- **Content Pillars:** List 3 themes to consistently post about.
+- **Sample Posts:** Provide one sample post for each pillar to illustrate the voice and theme.
+- **Key Metric:** What is the #1 metric to track for this campaign?`;
+
     case ActionType.PLAN_AUDIENCE_GROWTH:
-        return `${basePrompt}Create a plan for audience growth and engagement for the first 6 months. Suggest strategies across content marketing (blogging, SEO), community building (Discord, Reddit), and email marketing.`;
+      return `${basePrompt}Create a "6-Month Audience Growth Plan". Focus on sustainable strategies. Use these headings:
+- **Month 1-2 (Foundation):** Focus on one core channel (e.g., SEO-driven blog posts, building a Discord community). Outline the key activities.
+- **Month 3-4 (Expansion):** How to double down on what's working and add one complementary channel.
+- **Month 5-6 (Optimization):** How to analyze results and refine the strategy.
+- **Engagement Flywheel:** Describe a simple loop for how you will turn new audience members into engaged fans.`;
+
     case ActionType.CREATE_MARKETING_STRATEGY:
-        return `${basePrompt}Outline a comprehensive go-to-market strategy. Cover key marketing channels (e.g., content marketing, social media, SEO, paid ads), define the core marketing message, and create a high-level timeline for the first 3 months.`;
+      return `${basePrompt}Outline a "Go-To-Market (GTM) Strategy". Structure your response with these headings:
+- **Unique Selling Proposition (USP):** What is the one thing you do better than anyone else?
+- **Brand Voice:** Describe the brand's personality in 3-4 keywords.
+- **Core Marketing Channel:** What is the primary channel you will use to acquire the first 100 users? Explain why.
+- **Launch Message:** Write a clear, compelling message to announce the product.`;
+
     case ActionType.GENERATE_FUNDING_ROADMAP:
-        return `${basePrompt}Generate a potential funding roadmap. Describe the typical stages (Pre-seed, Seed, Series A), the key milestones to achieve for each stage, and the estimated capital to raise at each round.`;
+      return `${basePrompt}Generate a "Startup Funding Roadmap". Describe the first two likely funding stages. Use these headings for each stage (e.g., "Pre-Seed Round", "Seed Round"):
+- **Key Goal:** What is the main objective of this funding round?
+- **Milestones to Achieve:** List 3-4 concrete milestones needed to justify the round (e.g., "1,000 active users", "MVP launched").
+- **Estimated Capital:** Provide a typical range for this stage.
+- **Primary Use of Funds:** How will the capital be spent? (e.g., "Hire 2 engineers", "Initial marketing budget").`;
+
     case ActionType.DEFINE_MONETIZATION_MODEL:
-        return `${basePrompt}Define and compare 3 potential monetization models for this startup (e.g., Subscription, Freemium, Transactional). Present this as a table with columns: 'Model', 'Pros', and 'Cons'. The pros and cons should be in the context of this specific idea.`;
+      return `${basePrompt}Compare 3 potential monetization models tailored for this startup. Present this as a table with columns: 'Model' (e.g., Tiered Subscription), 'Best For...', 'Key Metric to Track', and 'Potential Challenge'. The 'Best For...' column should describe the ideal customer for that model.`;
+
     case ActionType.MAP_GTM_PLAN:
-        return `${basePrompt}Map out a detailed Go-To-Market (GTM) plan for the launch. Include target audience segmentation, value proposition, marketing channels, sales strategy, and key performance indicators (KPIs).`;
+      return `${basePrompt}Map out a detailed "Go-To-Market (GTM) Plan" focused on the first launch. Use these headings:
+- **Target Audience Segment:** Be hyper-specific about the first group of users you'll target.
+- **Launch Channels:** Where will you announce and promote the product? (List 2-3 specific places, e.g., Product Hunt, a specific subreddit).
+- **Launch Offer:** Is there a special offer for early adopters? (e.g., Lifetime deal, extended trial).
+- **Post-Launch Goal (First 30 Days):** What is the single most important goal after launching?`;
+
     case ActionType.GENERATE_TODO_LIST:
-        return `${basePrompt}Generate a phase-based to-do list to get this startup off the ground. Break it down into phases like 'Phase 1: Validation (Weeks 1-4)', 'Phase 2: MVP Development (Weeks 5-12)', and 'Phase 3: Launch (Weeks 13-16)', with actionable tasks in each phase.`;
+      return `${basePrompt}Generate an actionable, phase-based to-do list to launch this startup. Use these headings and include 3-4 key tasks under each:
+- **Phase 1: Validation & Research (Next 4 Weeks):** Tasks to confirm the problem and solution are needed.
+- **Phase 2: Prototyping & MVP Build (Next 8 Weeks):** Tasks to build the core product.
+- **Phase 3: Launch & Feedback (Next 4 Weeks):** Tasks to launch and gather initial user feedback.
+For each task, suggest a primary owner (e.g., Founder, Dev, Marketing).`;
     default:
-      return `${basePrompt}${instruction}`;
+      return `${basePrompt}${action}`;
   }
 }
 

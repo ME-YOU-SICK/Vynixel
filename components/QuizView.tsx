@@ -1,19 +1,23 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { QuizContent } from '../types';
+import { useStore } from '../store';
 
 interface QuizViewProps {
   content: QuizContent;
+  nodeId: string;
+  answers: { [key: number]: string } | undefined;
 }
 
-const QuizView: React.FC<QuizViewProps> = ({ content }) => {
-  const [answers, setAnswers] = useState<{ [key: number]: string }>({});
+const QuizView: React.FC<QuizViewProps> = ({ content, nodeId, answers = {} }) => {
+  const { updateNodeAnswers } = useStore();
 
   if (!content || !Array.isArray(content)) {
     return <p className="text-muted-foreground">Invalid quiz data.</p>;
   }
   
   const handleAnswerChange = (questionIndex: number, answer: string) => {
-    setAnswers(prev => ({...prev, [questionIndex]: answer}));
+    const newAnswers = {...answers, [questionIndex]: answer};
+    updateNodeAnswers(nodeId, newAnswers);
   };
 
   return (
