@@ -1,4 +1,3 @@
-
 import React from 'react';
 
 export const PlusIcon: React.FC<{ className?: string }> = ({ className }) => (
@@ -37,5 +36,18 @@ export const RegenerateIcon: React.FC<{ className?: string }> = ({ className }) 
     strokeWidth={2}
   >
     <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h5M20 20v-5h-5M4 4a14.95 14.95 0 0114.32 11.23M20 20a14.95 14.95 0 01-14.32-11.23" />
+  </svg>
+);
+
+export const CloseIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    className={className || "h-6 w-6"}
+    fill="none"
+    viewBox="0 0 24 24"
+    stroke="currentColor"
+    strokeWidth={2}
+  >
+    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
   </svg>
 );

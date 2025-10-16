@@ -43,3 +43,13 @@ export interface NodeData {
   width: number;
   height: number;
 }
+
+export type ExportSectionStatus = 'included' | 'missing' | 'generated' | 'generating';
+
+export interface ExportSection {
+  id: string;
+  title: ActionType | string;
+  content: string | NodeContent;
+  status: ExportSectionStatus;
+  enabled: boolean;
+}

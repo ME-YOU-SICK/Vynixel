@@ -55,9 +55,6 @@ const Canvas: React.FC<CanvasProps> = ({ nodes, onNodeMove, onNodeAdd, onNodeCon
             
             setTransform({ x: newX, y: newY, scale: newScale });
         }
-    } else {
-        // Pan with scroll wheel
-        setTransform(prev => ({ ...prev, x: prev.x - e.deltaX, y: prev.y - e.deltaY }));
     }
   };
 

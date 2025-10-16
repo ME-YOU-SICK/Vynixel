@@ -3,6 +3,25 @@ import { ActionType, NodeContent } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
+const responseSchema = {
+    type: Type.ARRAY,
+    items: {
+        type: Type.OBJECT,
+        properties: {
+            type: {
+                type: Type.STRING,
+                enum: ['heading', 'bullet', 'paragraph'],
+                description: 'The type of content element.'
+            },
+            content: {
+                type: Type.STRING,
+                description: 'The text content of the element.'
+            }
+        },
+        required: ['type', 'content']
+    }
+};
+
 function getPromptForAction(idea: string, action: ActionType): string {
   const basePrompt = `You are an expert startup consultant. Based on the following startup idea: "${idea}"\n\n`;
   
@@ -67,24 +86,7 @@ export const generateNodeContent = async (parentContent: string, action: ActionT
             contents: prompt,
             config: {
                 responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.ARRAY,
-                    items: {
-                        type: Type.OBJECT,
-                        properties: {
-                            type: {
-                                type: Type.STRING,
-                                enum: ['heading', 'bullet', 'paragraph'],
-                                description: 'The type of content element.'
-                            },
-                            content: {
-                                type: Type.STRING,
-                                description: 'The text content of the element.'
-                            }
-                        },
-                        required: ['type', 'content']
-                    }
-                }
+                responseSchema,
             }
         });
 
@@ -95,5 +97,41 @@ export const generateNodeContent = async (parentContent: string, action: ActionT
         console.error("Error generating content with Gemini API:", error);
         // Throw a new error to be caught by the calling function in App.tsx
         throw new Error("Failed to generate structured content from AI.");
+    }
+};
+
+export const generateMissingDocument = async (context: string, missingAction: ActionType): Promise<NodeContent> => {
+    if (!process.env.API_KEY) {
+        return Promise.resolve([
+            { type: 'heading', content: 'Configuration Error' },
+            { type: 'paragraph', content: 'API Key not configured.' }
+        ]);
+    }
+
+    try {
+        const prompt = `You are a startup consultant synthesizing a business plan.
+        You have the following context from an existing business plan:
+        ---
+        ${context}
+        ---
+        
+        Based on all the information above, generate the content for the following missing section: "${missingAction}".
+        Make sure the new section is consistent with the provided context. Structure your response clearly with headings, paragraphs, and bullet points.`;
+        
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema,
+            }
+        });
+
+        const jsonText = response.text.trim();
+        return JSON.parse(jsonText) as NodeContent;
+
+    } catch (error) {
+        console.error("Error generating missing document with Gemini API:", error);
+        throw new Error("Failed to generate structured content for missing document.");
     }
 };
