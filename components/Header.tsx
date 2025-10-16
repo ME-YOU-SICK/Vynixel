@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useStore } from '../store';
-import { ExportIcon, AnalyzeIcon, SettingsIcon } from './icons';
+import { ExportIcon, AnalyzeIcon, SettingsIcon, PlusIcon, TrashIcon } from './icons';
 import ThemeToggle from './ThemeToggle';
 
 const UserProfile: React.FC = () => {
@@ -47,10 +47,16 @@ const UserProfile: React.FC = () => {
 };
 
 const Header: React.FC = () => {
-  const { openExportModal, analyzeBlueprint, openSettingsModal } = useStore(state => ({
+  const { openExportModal, analyzeBlueprint, openSettingsModal, model, apiKey, clearCanvas, initializeNodes, isAuthenticated, provider } = useStore(state => ({
     openExportModal: state.openExportModal,
     analyzeBlueprint: state.analyzeBlueprint,
     openSettingsModal: state.openSettingsModal,
+    model: state.model,
+    apiKey: state.apiKey,
+    clearCanvas: state.clearCanvas,
+    initializeNodes: state.initializeNodes,
+    isAuthenticated: state.isAuthenticated,
+    provider: state.provider,
   }));
 
   return (
@@ -60,6 +66,16 @@ const Header: React.FC = () => {
           V
         </div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">Vynixel</h1>
+        {isAuthenticated && (
+          <button
+            onClick={() => { clearCanvas(); initializeNodes(); }}
+            className="ml-2 w-9 h-9 flex items-center justify-center rounded-lg border bg-secondary text-secondary-foreground hover:bg-accent"
+            title="New canvas"
+            aria-label="New canvas"
+          >
+            <PlusIcon className="w-5 h-5" />
+          </button>
+        )}
       </div>
       <div className="flex items-center space-x-2">
         <ThemeToggle />
@@ -70,6 +86,18 @@ const Header: React.FC = () => {
         >
           <SettingsIcon className="w-5 h-5" />
         </button>
+        {isAuthenticated && (
+          <button
+            onClick={() => { if (confirm('This will delete your entire canvas for this user. Continue?')) clearCanvas(); }}
+            className="flex items-center justify-center w-10 h-10 transition-colors border rounded-lg bg-red-600 text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-400"
+            aria-label="Delete canvas"
+            title="Delete entire canvas"
+          >
+            <TrashIcon className="w-5 h-5" />
+          </button>
+        )}
+        {/* Expose provider, model and optional API key for runtime consumers */}
+        <script dangerouslySetInnerHTML={{ __html: `window.__VYNIXEL_PROVIDER__ = ${JSON.stringify(provider)}; window.__VYNIXEL_MODEL__ = ${JSON.stringify(model)}; window.__VYNIXEL_API_KEY__ = ${apiKey ? JSON.stringify(apiKey) : 'undefined'};` }} />
         <button 
           onClick={analyzeBlueprint}
           className="items-center px-4 py-2 space-x-2 text-sm font-medium transition-colors border rounded-lg bg-secondary text-secondary-foreground hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring hidden md:flex"

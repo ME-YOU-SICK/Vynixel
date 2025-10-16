@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import jsPDF from 'jspdf';
+import { jsPDF } from 'jspdf';
 import { ExportSection, NodeContent, QuizContent, TableContent } from '../types';
 import { CloseIcon } from './icons';
 import SmallLoadingSpinner from './SmallLoadingSpinner';
@@ -192,7 +192,16 @@ const ExportModal: React.FC = () => {
                       <span className={section.enabled ? 'text-foreground' : 'text-muted-foreground'}>{section.title}</span>
                     </label>
                   </div>
-                  {section.status === 'missing' && <button onClick={() => generateMissingSection(section)} className="px-2 py-1 text-xs font-semibold text-primary transition-colors bg-primary/10 rounded-md hover:bg-primary/20">Generate</button>}
+                  {section.status === 'missing' && (
+                    <button
+                      draggable={false}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => { e.stopPropagation(); generateMissingSection(section); }}
+                      className="px-2 py-1 text-xs font-semibold text-primary transition-colors bg-primary/10 rounded-md hover:bg-primary/20"
+                    >
+                      Generate
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>

@@ -44,29 +44,30 @@ const Node: React.FC<NodeProps> = ({ data }) => {
     if (data.nodeType !== 'text') return;
 
     const justFinishedLoading = wasLoading.current && !data.isLoading;
-
-    // FIX: The condition to check for quiz content was flawed and caused a type error.
-    // This new condition correctly identifies text content (NodeContent) and excludes other types like QuizContent.
-    if (justFinishedLoading && data.content && Array.isArray(data.content) && (data.content.length === 0 || 'content' in data.content[0])) {
-        setDisplayedContent([]); // Reset to start animation
-        const contentArray = data.content as NodeContent;
-        
-        let i = 0;
-        const interval = setInterval(() => {
-            setDisplayedContent(contentArray.slice(0, i + 1));
-            i++;
-            if (i > contentArray.length) {
-                clearInterval(interval);
-            }
-        }, 50); // Speed of line-by-line animation
-        
-        return () => clearInterval(interval);
+    if (justFinishedLoading && data.nodeType === 'text') {
+        if (typeof data.content === 'string') {
+            setDisplayedContent([{ type: 'paragraph', content: data.content }]);
+        } else if (Array.isArray(data.content)) {
+            setDisplayedContent(data.content as NodeContent);
+        } else if (data.content && typeof data.content === 'object') {
+            setDisplayedContent([{ type: 'paragraph', content: JSON.stringify(data.content) }]);
+        } else {
+            setDisplayedContent([]);
+        }
     } else if (!data.isLoading) {
         // If not loading (e.g., initial render of existing node), show full content immediately
         if (typeof data.content === 'string') {
             setDisplayedContent([{type: 'paragraph', content: data.content}]);
         } else if (data.nodeType === 'text') {
-            setDisplayedContent(data.content as NodeContent);
+            // Ensure we only set arrays; gracefully handle unexpected objects
+            const maybeArray = data.content as unknown;
+            if (Array.isArray(maybeArray)) {
+                setDisplayedContent(maybeArray as NodeContent);
+            } else if (maybeArray && typeof maybeArray === 'object') {
+                setDisplayedContent([{ type: 'paragraph', content: JSON.stringify(maybeArray) }]);
+            } else {
+                setDisplayedContent([]);
+            }
         }
     }
 
@@ -95,12 +96,15 @@ const Node: React.FC<NodeProps> = ({ data }) => {
       let textContent = '';
       if (typeof data.content === 'string') {
         textContent = data.content;
-      } else {
+      } else if (Array.isArray(data.content)) {
         textContent = (data.content as NodeContent).map(item => {
           if (item.type === 'heading') return `**${item.content}**`;
           if (item.type === 'bullet') return `- ${item.content}`;
           return item.content;
         }).join('\n');
+      } else if (data.content && typeof data.content === 'object') {
+        // Fallback for unexpected object content
+        textContent = JSON.stringify(data.content);
       }
       setEditableContent(textContent);
       setTimeout(() => {
@@ -235,7 +239,7 @@ const Node: React.FC<NodeProps> = ({ data }) => {
         return <div className="absolute inset-0 bg-card/75 flex items-center justify-center rounded-lg"><LoadingSpinner /></div>;
     }
 
-    const contentWrapperClass = "node-content-display text-base text-card-foreground flex-grow overflow-y-auto";
+    const contentWrapperClass = "node-content-display text-base text-card-foreground flex-grow overflow-y-auto no-scrollbar";
 
     switch (data.nodeType) {
         case 'table':
@@ -252,7 +256,7 @@ const Node: React.FC<NodeProps> = ({ data }) => {
             );
         case 'text':
         default:
-            const contentToRender = displayedContent || [];
+            const contentToRender = Array.isArray(displayedContent) ? displayedContent : [];
             return (
                 <div className={`${contentWrapperClass} cursor-text space-y-2`} onClick={handleContentClick}>
                     {contentToRender.map((item, index) => {
@@ -271,7 +275,14 @@ const Node: React.FC<NodeProps> = ({ data }) => {
   return (
     <div ref={nodeRef} className="absolute group" style={{ left: data.position.x, top: data.position.y, width: `${data.width}px`, height: `${data.height}px`, cursor: isDragging ? 'grabbing' : 'grab' }} onMouseDown={handleMouseDown}>
         <div ref={cardRef} className="relative w-full h-full p-4 bg-card border-2 border-border rounded-lg shadow-lg flex flex-col glow-effect">
-            <h3 className="text-lg font-bold text-card-foreground pb-2 border-b border-border mb-2 flex-shrink-0">{data.title}</h3>
+            <h3 className="text-lg font-bold text-card-foreground pb-2 border-b border-border mb-2 flex-shrink-0 flex items-center justify-between">
+              <span>{data.title}</span>
+              {data.title !== 'Your Startup Idea' && !data.isEditing && (
+                <button onClick={(e) => { e.stopPropagation(); toggleNodeEditing(data.id, true); }} className="text-xs px-2 py-1 rounded-md border bg-secondary text-secondary-foreground hover:bg-accent">
+                  Edit
+                </button>
+              )}
+            </h3>
             
             {data.isEditing && data.nodeType === 'text' ? (
                  <textarea ref={textareaRef} value={editableContent} onChange={(e) => setEditableContent(e.target.value)} onBlur={handleContentBlur} onInput={resizeTextarea} className="node-content text-base text-card-foreground flex-grow bg-transparent w-full resize-none focus:outline-none" onClick={(e) => e.stopPropagation()} />

@@ -1,8 +1,21 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { ActionType, NodeContent } from "../types";
 
-// FIX: Removed 'as string' to align with Gemini API guidelines. The environment variable is assumed to be set.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Construct client lazily to avoid throwing at module load when no key is set
+function getRuntimeConfig() {
+    const w: any = window as any;
+    return {
+        provider: w?.__VYNIXEL_PROVIDER__ || 'gemini',
+        model: w?.__VYNIXEL_MODEL__ || 'gemini-2.5-flash',
+        apiKey: w?.__VYNIXEL_API_KEY__ || undefined,
+    } as { provider: string; model: string; apiKey?: string };
+}
+
+function getGenAI(withApiKey?: string) {
+    const apiKey = withApiKey || process.env.API_KEY || process.env.GEMINI_API_KEY;
+    if (!apiKey) return null;
+    return new GoogleGenAI({ apiKey });
+}
 
 const textResponseSchema = {
     type: Type.ARRAY,
@@ -75,7 +88,7 @@ const actionToSchemaMap = {
 
 
 function getPromptForAction(idea: string, action: ActionType): string {
-  const basePrompt = `You are a world-class startup consultant and product strategist. Your advice is sharp, actionable, and tailored. For the startup idea: "${idea}"\n\n`;
+  const basePrompt = `You are a world-class startup consultant and product strategist. Your advice is sharp, actionable, and tailored. For the startup idea: "${idea}"\n\nWhen you respond, you MUST use one of the following formats so the app can parse it cleanly:\n1) Strict JSON matching the schema for the selected action (preferred).\n2) Markdown with clear headings and bullets using ONLY this syntax:\n   - Headings as ****Heading Text:**** (four asterisks on both sides, colon optional)\n   - Bullets starting with '- ' (dash and space)\nDo not use other heading syntaxes. Do not wrap the whole response in code fences.\n\n`;
 
   switch (action) {
     case ActionType.EXPAND_IDEA:
@@ -197,15 +210,41 @@ For each task, suggest a primary owner (e.g., Founder, Dev, Marketing).`;
 }
 
 const generateJSON = async (prompt: string): Promise<NodeContent> => {
-    if (!process.env.API_KEY) {
-        return Promise.resolve([
-            { type: 'heading', content: 'Configuration Error' },
-            { type: 'paragraph', content: 'API Key not configured.' }
-        ]);
-    }
     try {
+        const cfg = getRuntimeConfig();
+        if (cfg.provider !== 'gemini') {
+            if (!cfg.apiKey) {
+                return [
+                    { type: 'heading', content: 'Configuration Error' },
+                    { type: 'paragraph', content: 'API Key not configured.' }
+                ];
+            }
+            const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${cfg.apiKey}`,
+                },
+                body: JSON.stringify({
+                    model: cfg.model || 'openrouter/auto',
+                    messages: [{ role: 'user', content: prompt }],
+                    response_format: { type: 'json_object' },
+                })
+            });
+            const data = await resp.json();
+            const text = data?.choices?.[0]?.message?.content ?? '[]';
+            return JSON.parse(text) as NodeContent;
+        }
+
+        const ai = getGenAI(cfg.apiKey);
+        if (!ai) {
+            return [
+                { type: 'heading', content: 'Configuration Error' },
+                { type: 'paragraph', content: 'API Key not configured.' }
+            ];
+        }
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: cfg.model || 'gemini-2.5-flash',
             contents: prompt,
             config: { responseMimeType: "application/json", responseSchema: textResponseSchema }
         });
@@ -217,13 +256,17 @@ const generateJSON = async (prompt: string): Promise<NodeContent> => {
 };
 
 export async function* generateContentStream(prompt: string, schema: any): AsyncGenerator<string, void, unknown> {
-    if (!process.env.API_KEY) {
-        yield '{"error": "API Key not configured."}';
-        return;
-    }
     try {
+        const cfg = getRuntimeConfig();
+        if (cfg.provider !== 'gemini') {
+            const content = await generateJSON(prompt);
+            yield JSON.stringify(content);
+            return;
+        }
+        const ai = getGenAI(cfg.apiKey);
+        if (!ai) { yield '{"error": "API Key not configured."}'; return; }
         const response = await ai.models.generateContentStream({
-            model: 'gemini-2.5-flash',
+            model: cfg.model || 'gemini-2.5-flash',
             contents: prompt,
             config: { responseMimeType: "application/json", responseSchema: schema }
         });

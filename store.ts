@@ -31,6 +31,29 @@ const saveNodesToStorage = (nodes: Map<string, NodeData>, user: User | null) => 
     }
 };
 
+const settingsStorageKey = (user: User | null) => user && user.email ? `vynixel_settings_${user.email}` : 'vynixel_settings_guest';
+
+const saveSettingsToStorage = (settings: { provider?: AIProvider; model?: string; apiKey?: string }, user: User | null) => {
+    try {
+        const key = settingsStorageKey(user);
+        const existing = localStorage.getItem(key);
+        const current = existing ? JSON.parse(existing) : {};
+        const updated = { ...current, ...settings };
+        localStorage.setItem(key, JSON.stringify(updated));
+    } catch (e) {
+        console.warn('Failed to save settings:', e);
+    }
+};
+
+const loadSettingsFromStorage = (user: User | null): { provider?: AIProvider; model?: string; apiKey?: string } => {
+    try {
+        const raw = localStorage.getItem(settingsStorageKey(user));
+        return raw ? JSON.parse(raw) : {};
+    } catch (e) {
+        return {};
+    }
+};
+
 
 const getNodeTypeForAction = (action: ActionType): NodeType => {
     switch (action) {
@@ -86,11 +109,103 @@ const formatNodeContentForExport = (node: { content: NodeData['content'], nodeTy
 };
 
 const parseContent = (text: string): NodeContent | TableContent | QuizContent => {
+    const normalizeMarkdownish = (raw: string): NodeContent => {
+        const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+        const items: NodeContent = [];
+        for (const line of lines) {
+            // ****Heading:**** or **Heading:** or ### Heading
+            const starHeading = line.match(/^\*{2,}\s*(.+?)\s*\*{2,}\s*:?.*$/);
+            const hashHeading = line.match(/^#{2,,6}\s*(.+)$/);
+            if (starHeading) {
+                const content = starHeading[1].replace(/:$/, '').trim();
+                items.push({ type: 'heading', content });
+                const rest = line.replace(starHeading[0], '').trim();
+                if (rest) items.push({ type: 'paragraph', content: rest });
+                continue;
+            }
+            if (hashHeading) {
+                items.push({ type: 'heading', content: hashHeading[1].trim() });
+                continue;
+            }
+            // Bullets
+            const bullet = line.match(/^[-\u2022]\s+(.*)$/);
+            if (bullet) {
+                items.push({ type: 'bullet', content: bullet[1] });
+                continue;
+            }
+            // Default paragraph
+            items.push({ type: 'paragraph', content: line });
+        }
+        return items.length > 0 ? items : [{ type: 'paragraph', content: raw }];
+    };
+
     try {
-        return JSON.parse(text);
-    } catch (e) {
-        console.warn("Failed to parse JSON, falling back to error message:", text, e);
-        return [{ type: 'paragraph', content: 'AI returned malformed content. Please try regenerating.' }];
+        // Try whole-text JSON first
+        let parsed = JSON.parse(text);
+        // If already the expected shapes, return as-is
+        if (Array.isArray(parsed)) {
+            return parsed as NodeContent | QuizContent;
+        }
+        if (parsed && typeof parsed === 'object') {
+            // Normalize generic objects into NodeContent (headings + bullets/paragraphs)
+            const items: NodeContent = [];
+            for (const [key, value] of Object.entries(parsed)) {
+                items.push({ type: 'heading', content: key });
+                if (typeof value === 'string') {
+                    items.push(...normalizeMarkdownish(value));
+                } else if (Array.isArray(value)) {
+                    for (const v of value) {
+                        if (typeof v === 'string') items.push({ type: 'bullet', content: v });
+                        else items.push({ type: 'paragraph', content: JSON.stringify(v) });
+                    }
+                } else if (value && typeof value === 'object') {
+                    items.push({ type: 'paragraph', content: JSON.stringify(value) });
+                } else if (value != null) {
+                    items.push({ type: 'paragraph', content: String(value) });
+                }
+            }
+            return items;
+        }
+        // Fallback to paragraph string or embedded JSON object within text
+        if (parsed != null) {
+            return normalizeMarkdownish(String(parsed));
+        }
+        return [{ type: 'paragraph', content: '' }];
+    } catch {
+        // Not pure JSON: try to extract the first JSON object from the text
+        const start = text.indexOf('{');
+        const end = text.lastIndexOf('}');
+        if (start !== -1 && end !== -1 && end > start) {
+            const prefix = text.slice(0, start).trim();
+            const jsonSlice = text.slice(start, end + 1);
+            try {
+                const baseItems = prefix ? normalizeMarkdownish(prefix) : [];
+                const obj = JSON.parse(jsonSlice);
+                if (obj && typeof obj === 'object') {
+                    const items: NodeContent = [...baseItems];
+                    for (const [key, value] of Object.entries(obj)) {
+                        items.push({ type: 'heading', content: key });
+                        if (typeof value === 'string') {
+                            items.push(...normalizeMarkdownish(value));
+                        } else if (Array.isArray(value)) {
+                            for (const v of value) {
+                                if (typeof v === 'string') items.push({ type: 'bullet', content: v });
+                                else items.push({ type: 'paragraph', content: JSON.stringify(v) });
+                            }
+                        } else if (value && typeof value === 'object') {
+                            items.push({ type: 'paragraph', content: JSON.stringify(value) });
+                        } else if (value != null) {
+                            items.push({ type: 'paragraph', content: String(value) });
+                        }
+                    }
+                    return items;
+                }
+            } catch {
+                // ignore and fall through
+            }
+        }
+        // Treat as markdownish text
+        return normalizeMarkdownish(text);
     }
 };
 
@@ -99,6 +214,8 @@ export const useStore = create<VynixelState>((set, get) => ({
     nodes: new Map(),
     theme: 'dark',
     provider: 'gemini',
+    model: 'gemini-2.5-flash',
+    apiKey: undefined,
     isAuthenticated: false,
     user: null,
     isSettingsModalOpen: false,
@@ -108,16 +225,16 @@ export const useStore = create<VynixelState>((set, get) => ({
     customPromptParentNode: null,
 
     login: () => {
-        const mockUser: User = {
-            name: 'Alex Rider',
-            email: 'alex.rider@example.com',
-            avatarUrl: `https://api.dicebear.com/8.x/bottts/svg?seed=alexrider&backgroundColor=222222,111111&backgroundType=gradientLinear&eyes=frame1,frame2&mouth=smile01,smile02&sides=square,round,triangle`,
-        };
-        // Reset nodes, initializeNodes will be called by App.tsx to load the user's saved data
-        set({ isAuthenticated: true, user: mockUser, nodes: new Map() });
+        // Redirect to backend Google OAuth
+        window.location.href = '/auth/google';
     },
 
-    logout: () => {
+    logout: async () => {
+        try {
+            await fetch('/auth/logout', { method: 'POST', credentials: 'include' });
+        } catch (e) {
+            // ignore network errors on logout
+        }
         set({ isAuthenticated: false, user: null, nodes: new Map() });
     },
 
@@ -164,6 +281,29 @@ export const useStore = create<VynixelState>((set, get) => ({
         const initialNodes = new Map([[initialNodeId, initialNode]]);
         set({ nodes: initialNodes });
         saveNodesToStorage(initialNodes, user); // Save the initial state.
+    },
+
+    // Hydrate session from backend; call this early on app load
+    hydrateSession: async () => {
+        try {
+            const res = await fetch('/api/me', { credentials: 'include' });
+            if (!res.ok) {
+                const guestSettings = loadSettingsFromStorage(null);
+                set({ isAuthenticated: false, user: null, ...guestSettings });
+                return;
+            }
+            const data = await res.json();
+            if (data.authenticated && data.user) {
+                const userSettings = loadSettingsFromStorage(data.user);
+                set({ isAuthenticated: true, user: data.user, ...userSettings });
+            } else {
+                const guestSettings = loadSettingsFromStorage(null);
+                set({ isAuthenticated: false, user: null, ...guestSettings });
+            }
+        } catch (e) {
+            const guestSettings = loadSettingsFromStorage(null);
+            set({ isAuthenticated: false, user: null, ...guestSettings });
+        }
     },
 
     updateNodePosition: (id, newPosition) => set(state => {
@@ -252,6 +392,7 @@ export const useStore = create<VynixelState>((set, get) => ({
         
         let accumulatedText = "";
         try {
+            const { provider, model, apiKey } = get();
             const stream = generateNodeContentStream(parentContentString, action);
             for await (const chunk of stream) {
                 accumulatedText += chunk;
@@ -428,6 +569,7 @@ export const useStore = create<VynixelState>((set, get) => ({
 
         let accumulatedText = "";
         try {
+            const { provider, model, apiKey } = get();
             const stream = generateCustomPromptContent(parentContentString, prompt);
             for await (const chunk of stream) {
                 accumulatedText += chunk;
@@ -481,6 +623,13 @@ export const useStore = create<VynixelState>((set, get) => ({
     closeExportModal: () => set({ isExportModalOpen: false, exportSections: [] }),
     
     setExportSections: (sections) => set({ exportSections: sections }),
+
+    // Danger: Clears the entire canvas and user graph
+    clearCanvas: () => set(state => {
+        const newNodes = new Map<string, NodeData>();
+        saveNodesToStorage(newNodes, state.user);
+        return { nodes: newNodes };
+    }),
     
     generateMissingSection: async (sectionToGenerate) => {
         set(state => {
@@ -496,6 +645,7 @@ export const useStore = create<VynixelState>((set, get) => ({
 
         let accumulatedText = "";
         try {
+            const { provider, model, apiKey } = get();
             const stream = generateMissingDocument(context, sectionToGenerate.title as ActionType);
             for await (const chunk of stream) {
                 accumulatedText += chunk;
@@ -572,5 +722,7 @@ export const useStore = create<VynixelState>((set, get) => ({
 
     openSettingsModal: () => set({ isSettingsModalOpen: true }),
     closeSettingsModal: () => set({ isSettingsModalOpen: false }),
-    setProvider: (provider) => set({ provider }),
+    setProvider: (provider) => set(state => { saveSettingsToStorage({ provider }, state.user); return { provider }; }),
+    setModel: (model) => set(state => { saveSettingsToStorage({ model }, state.user); return { model }; }),
+    setApiKey: (apiKey) => set(state => { saveSettingsToStorage({ apiKey }, state.user); return { apiKey }; }),
 }));

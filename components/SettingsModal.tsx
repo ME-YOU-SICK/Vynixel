@@ -14,10 +14,14 @@ const providerDisplayNames: Record<AIProvider, string> = {
 
 
 const SettingsModal: React.FC = () => {
-  const { closeSettingsModal, provider, setProvider } = useStore(state => ({
+  const { closeSettingsModal, provider, setProvider, model, setModel, apiKey, setApiKey } = useStore(state => ({
     closeSettingsModal: state.closeSettingsModal,
     provider: state.provider,
-    setProvider: state.setProvider
+    setProvider: state.setProvider,
+    model: state.model,
+    setModel: state.setModel,
+    apiKey: state.apiKey,
+    setApiKey: state.setApiKey
   }));
 
   return (
@@ -33,8 +37,17 @@ const SettingsModal: React.FC = () => {
         <div className="p-6 space-y-6">
           <div>
             <h3 className="text-lg font-semibold mb-2">API Configuration</h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              For security, the API key must be configured in your environment variables. It cannot be changed here.
+            <label htmlFor="api-key" className="block text-sm font-medium text-muted-foreground mb-1">API Key</label>
+            <input
+              id="api-key"
+              type="password"
+              placeholder={`Using ${provider} key from environment if left blank`}
+              className="w-full px-3 py-2 bg-input border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+              value={apiKey || ''}
+              onChange={(e) => setApiKey(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground mt-2">
+              Stored locally per user; clear it to fallback to environment key.
             </p>
           </div>
 
@@ -50,8 +63,39 @@ const SettingsModal: React.FC = () => {
                 <option key={key} value={key}>{name}</option>
               ))}
             </select>
+          </div>
+
+          <div>
+            <label htmlFor="model" className="block text-sm font-medium text-muted-foreground mb-1">Model</label>
+            <select
+              id="model"
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              className="w-full px-3 py-2 bg-input border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-ring mb-2"
+            >
+              {provider === 'gemini' && (
+                <>
+                  <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+                  <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+                  <option value="gemini-1.5-pro">gemini-1.5-pro</option>
+                </>
+              )}
+              {provider !== 'gemini' && (
+                <option value={model}>{model}</option>
+              )}
+              <option value="__custom__">Custom...</option>
+            </select>
+            {model === '__custom__' && (
+              <input
+                type="text"
+                placeholder="Enter custom model name (e.g., gemini-2.0-pro)"
+                className="w-full px-3 py-2 bg-input border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+                onBlur={(e) => setModel(e.target.value || 'gemini-2.5-flash')}
+                autoFocus
+              />
+            )}
             <p className="text-xs text-muted-foreground mt-2">
-              Note: Provider switching is a planned feature. Currently, all requests are handled by Google Gemini regardless of this setting.
+              Changing the model updates generation immediately for new content.
             </p>
           </div>
         </div>

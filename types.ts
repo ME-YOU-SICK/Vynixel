@@ -88,6 +88,8 @@ export interface VynixelState {
     nodes: Map<string, NodeData>;
     theme: Theme;
     provider: AIProvider;
+    model: string;
+    apiKey?: string;
     isAuthenticated: boolean;
     user: User | null;
     isSettingsModalOpen: boolean;
@@ -118,4 +120,8 @@ export interface VynixelState {
     openSettingsModal: () => void;
     closeSettingsModal: () => void;
     setProvider: (provider: AIProvider) => void;
+    setModel: (model: string) => void;
+    setApiKey: (apiKey: string) => void;
+    hydrateSession: () => Promise<void>;
+    clearCanvas: () => void;
 }

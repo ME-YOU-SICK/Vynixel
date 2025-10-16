@@ -37,9 +37,13 @@ const EditorApp: React.FC = () => {
 
 
 const App: React.FC = () => {
-  const { isAuthenticated, theme } = useStore(state => ({
+  const { isAuthenticated, theme, hydrateSession, provider, model, apiKey } = useStore(state => ({
     isAuthenticated: state.isAuthenticated,
     theme: state.theme,
+    hydrateSession: state.hydrateSession,
+    provider: state.provider,
+    model: state.model,
+    apiKey: state.apiKey,
   }));
 
   useEffect(() => {
@@ -50,6 +54,18 @@ const App: React.FC = () => {
       root.classList.remove('dark');
     }
   }, [theme]);
+
+  useEffect(() => {
+    // Attempt to restore session on initial load
+    hydrateSession();
+  }, [hydrateSession]);
+
+  useEffect(() => {
+    // Expose current AI config to runtime consumers (services)
+    (window as any).__VYNIXEL_PROVIDER__ = provider;
+    (window as any).__VYNIXEL_MODEL__ = model;
+    (window as any).__VYNIXEL_API_KEY__ = apiKey;
+  }, [provider, model, apiKey]);
 
   return (
     <div className="w-screen h-screen overflow-hidden font-sans bg-background text-foreground">

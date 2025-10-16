@@ -119,3 +119,14 @@ export const GoogleIcon: React.FC<{ className?: string }> = ({ className }) => (
     <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
   </svg>
 );
+
+export const TrashIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    className={className || "h-5 w-5"}
+    viewBox="0 0 24 24"
+    fill="currentColor"
+  >
+    <path d="M9 3h6a1 1 0 011 1v1h4a1 1 0 110 2h-1l-1 13a3 3 0 01-3 3H8a3 3 0 01-3-3L4 7H3a1 1 0 110-2h4V4a1 1 0 011-1zm1 4a1 1 0 10-2 0v11a1 1 0 102 0V7zm6 0a1 1 0 10-2 0v11a1 1 0 102 0V7z" />
+  </svg>
+);

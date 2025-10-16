@@ -39,8 +39,9 @@ const Canvas: React.FC = () => {
   const handleMouseUp = useCallback(() => setIsPanning(false), []);
 
   const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
+    // Avoid preventDefault on passive listeners; only block when zooming
     if (isZoomingWithKey) {
+        e.preventDefault();
         const scaleAmount = -e.deltaY * 0.001;
         const newScale = Math.min(Math.max(0.2, transform.scale + scaleAmount), 2);
         
