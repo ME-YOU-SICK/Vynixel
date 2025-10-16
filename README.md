@@ -1,7 +1,6 @@
 
 
 <div align="center">
-  <img alt="Vynixel" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" width="100%" />
   <h1>Vynixel</h1>
   <p>Visual AI blueprint builder for founders and product teams.</p>
 
