@@ -1,0 +1,37 @@
+
+export interface Position {
+  x: number;
+  y: number;
+}
+
+export enum ActionType {
+  EXPAND_IDEA = 'Expand or Refine Idea',
+  VALIDATE_IDEA = 'Validate Idea',
+  DEFINE_PROBLEM = 'Define Problem',
+  IDENTIFY_TARGET_USERS = 'Identify Target Users',
+  MAP_USER_PERSONAS = 'Map User Personas',
+  CREATE_USER_JOURNEY = 'Create User Journey',
+  DRAFT_PRD = 'Draft PRD',
+  DEFINE_MVP = 'Define MVP',
+  SUGGEST_TECH_STACK = 'Suggest Tech Stack',
+  GENERATE_PROJECT_STRUCTURE = 'Generate Project Structure',
+  BUILD_SOCIAL_MEDIA_CAMPAIGN = 'Build Social Media Campaign',
+  PLAN_AUDIENCE_GROWTH = 'Plan Audience Growth & Engagement',
+  CREATE_MARKETING_STRATEGY = 'Create Marketing Strategy',
+  GENERATE_FUNDING_ROADMAP = 'Generate Funding Roadmap',
+  DEFINE_MONETIZATION_MODEL = 'Define Monetization Model',
+  MAP_GTM_PLAN = 'Map Go-To-Market Plan',
+  GENERATE_TODO_LIST = 'Generate Phase-based To-Do List',
+  REGENERATE = 'Regenerate',
+}
+
+export interface NodeData {
+  id: string;
+  title: string;
+  content: string;
+  position: Position;
+  parentId: string | null;
+  isEditing: boolean;
+  isLoading: boolean;
+  availableActions: ActionType[];
+}
