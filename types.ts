@@ -76,13 +76,27 @@ export interface ExportSection {
 
 export type Theme = 'light' | 'dark';
 
+export type AIProvider = 'gemini' | 'openai' | 'claude' | 'mistral' | 'deepseek' | 'openrouter';
+
+export interface User {
+    name: string;
+    email: string;
+    avatarUrl: string;
+}
+
 export interface VynixelState {
     nodes: Map<string, NodeData>;
     theme: Theme;
+    provider: AIProvider;
+    isAuthenticated: boolean;
+    user: User | null;
+    isSettingsModalOpen: boolean;
     isExportModalOpen: boolean;
     exportSections: ExportSection[];
     isCustomPromptModalOpen: boolean;
     customPromptParentNode: { parentId: string, relativePosition: Position } | null;
+    login: () => void;
+    logout: () => void;
     initializeNodes: () => void;
     updateNodePosition: (id: string, newPosition: Position) => void;
     updateNodeContent: (id: string, content: string) => void;
@@ -101,4 +115,7 @@ export interface VynixelState {
     setExportSections: (sections: ExportSection[]) => void;
     generateMissingSection: (section: ExportSection) => Promise<void>;
     exportToPdf: () => void;
+    openSettingsModal: () => void;
+    closeSettingsModal: () => void;
+    setProvider: (provider: AIProvider) => void;
 }

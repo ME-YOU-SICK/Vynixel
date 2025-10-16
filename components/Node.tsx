@@ -270,7 +270,7 @@ const Node: React.FC<NodeProps> = ({ data }) => {
 
   return (
     <div ref={nodeRef} className="absolute group" style={{ left: data.position.x, top: data.position.y, width: `${data.width}px`, height: `${data.height}px`, cursor: isDragging ? 'grabbing' : 'grab' }} onMouseDown={handleMouseDown}>
-        <div ref={cardRef} className="relative w-full h-full p-4 bg-card border-2 border-border rounded-lg shadow-lg flex flex-col transition-all duration-200 hover:border-ring glow-effect">
+        <div ref={cardRef} className="relative w-full h-full p-4 bg-card border-2 border-border rounded-lg shadow-lg flex flex-col glow-effect">
             <h3 className="text-lg font-bold text-card-foreground pb-2 border-b border-border mb-2 flex-shrink-0">{data.title}</h3>
             
             {data.isEditing && data.nodeType === 'text' ? (

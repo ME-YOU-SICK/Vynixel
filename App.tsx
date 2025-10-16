@@ -4,23 +4,43 @@ import Canvas from './components/Canvas';
 import Header from './components/Header';
 import ExportModal from './components/ExportModal';
 import CustomPromptModal from './components/CustomPromptModal';
+import SettingsModal from './components/SettingsModal';
+import LandingPage from './pages/LandingPage';
 
-const App: React.FC = () => {
+const EditorApp: React.FC = () => {
   const { 
     isExportModalOpen, 
-    isCustomPromptModalOpen, 
-    theme,
+    isCustomPromptModalOpen,
+    isSettingsModalOpen, 
     initializeNodes
   } = useStore(state => ({
     isExportModalOpen: state.isExportModalOpen,
     isCustomPromptModalOpen: state.isCustomPromptModalOpen,
-    theme: state.theme,
+    isSettingsModalOpen: state.isSettingsModalOpen,
     initializeNodes: state.initializeNodes
   }));
 
   useEffect(() => {
     initializeNodes();
   }, [initializeNodes]);
+
+  return (
+    <>
+      <Header />
+      <Canvas />
+      {isExportModalOpen && <ExportModal />}
+      {isCustomPromptModalOpen && <CustomPromptModal />}
+      {isSettingsModalOpen && <SettingsModal />}
+    </>
+  );
+}
+
+
+const App: React.FC = () => {
+  const { isAuthenticated, theme } = useStore(state => ({
+    isAuthenticated: state.isAuthenticated,
+    theme: state.theme,
+  }));
 
   useEffect(() => {
     const root = document.documentElement;
@@ -33,10 +53,7 @@ const App: React.FC = () => {
 
   return (
     <div className="w-screen h-screen overflow-hidden font-sans bg-background text-foreground">
-      <Header />
-      <Canvas />
-      {isExportModalOpen && <ExportModal />}
-      {isCustomPromptModalOpen && <CustomPromptModal />}
+      {isAuthenticated ? <EditorApp /> : <LandingPage />}
     </div>
   );
 };

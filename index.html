@@ -90,10 +90,14 @@
       }
 
       .glow-effect {
-        transition: box-shadow 0.2s ease-in-out;
+        /* A more noticeable permanent glow */
+        box-shadow: 0 0 30px hsl(var(--ring) / 0.3);
+        transition: border-color 0.3s ease, box-shadow 0.3s ease;
       }
       .group:hover .glow-effect {
-        box-shadow: 0 0 15px hsl(var(--ring) / 0.25);
+        /* On hover, make the border and the glow much stronger */
+        border-color: hsl(var(--ring));
+        box-shadow: 0 0 40px hsl(var(--ring) / 0.6);
       }
     </style>
   <script type="importmap">
