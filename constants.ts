@@ -1,4 +1,3 @@
-
 import { ActionType } from './types';
 
 export const initialActions: ActionType[] = [
@@ -20,6 +19,7 @@ export const initialActions: ActionType[] = [
   ActionType.MAP_GTM_PLAN,
   ActionType.GENERATE_TODO_LIST,
   ActionType.REGENERATE,
+  ActionType.CUSTOM_PROMPT,
 ];
 
 export const NODE_WIDTH = 350;

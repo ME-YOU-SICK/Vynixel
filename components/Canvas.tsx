@@ -1,26 +1,27 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { NodeData, Position, ActionType } from '../types';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { NodeData, Position } from '../types';
 import Node from './Node';
+import { useStore } from '../store';
+import MiniMap from './MiniMap';
 
-interface CanvasProps {
-  nodes: Map<string, NodeData>;
-  onNodeMove: (id: string, position: Position) => void;
-  onNodeAdd: (parentId: string, action: ActionType, relativePosition: Position) => void;
-  onNodeContentUpdate: (id: string, content: string) => void;
-  onNodeEditingChange: (id: string, isEditing: boolean) => void;
-  onNodeRegenerate: (nodeId: string) => void;
-  onNodeSizeChange: (id: string, size: { width: number; height: number; }) => void;
-}
-
-const Canvas: React.FC<CanvasProps> = ({ nodes, onNodeMove, onNodeAdd, onNodeContentUpdate, onNodeEditingChange, onNodeRegenerate, onNodeSizeChange }) => {
+const Canvas: React.FC = () => {
+  const { nodes } = useStore(state => ({ nodes: state.nodes }));
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
   const [isPanning, setIsPanning] = useState(false);
   const [isZoomingWithKey, setIsZoomingWithKey] = useState(false);
   const lastMousePos = useRef<Position>({ x: 0, y: 0 });
   const canvasRef = useRef<HTMLDivElement>(null);
+  const [viewport, setViewport] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    if (canvasRef.current) {
+      const rect = canvasRef.current.getBoundingClientRect();
+      setViewport({ width: rect.width, height: rect.height });
+    }
+  }, []);
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('.group')) return;
+    if ((e.target as HTMLElement).closest('.group, .minimap')) return;
     setIsPanning(true);
     lastMousePos.current = { x: e.clientX, y: e.clientY };
     e.preventDefault();
@@ -35,9 +36,7 @@ const Canvas: React.FC<CanvasProps> = ({ nodes, onNodeMove, onNodeAdd, onNodeCon
     }
   }, [isPanning]);
 
-  const handleMouseUp = useCallback(() => {
-    setIsPanning(false);
-  }, []);
+  const handleMouseUp = useCallback(() => setIsPanning(false), []);
 
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
@@ -81,54 +80,60 @@ const Canvas: React.FC<CanvasProps> = ({ nodes, onNodeMove, onNodeAdd, onNodeCon
       window.removeEventListener('mouseleave', handleMouseUp);
     };
   }, [isPanning, handleMouseMove, handleMouseUp]);
-  
-  const getEdgePoint = (sourceNode: NodeData, targetNode: NodeData): Position => {
-    const s = {
-        x: sourceNode.position.x,
-        y: sourceNode.position.y,
-        w: sourceNode.width,
-        h: sourceNode.height
-    };
-    const t = {
-        x: targetNode.position.x,
-        y: targetNode.position.y,
-        w: targetNode.width,
-        h: targetNode.height
-    };
 
+  const getEdgePoint = (sourceNode: NodeData, targetNode: NodeData): Position => {
+    const s = { x: sourceNode.position.x, y: sourceNode.position.y, w: sourceNode.width, h: sourceNode.height };
+    const t = { x: targetNode.position.x, y: targetNode.position.y, w: targetNode.width, h: targetNode.height };
     const sCenter = { x: s.x + s.w / 2, y: s.y + s.h / 2 };
     const tCenter = { x: t.x + t.w / 2, y: t.y + t.h / 2 };
-    
     const dx = tCenter.x - sCenter.x;
     const dy = tCenter.y - sCenter.y;
-    
     if (dx === 0 && dy === 0) return { x: sCenter.x, y: sCenter.y };
-
     const sRatio = s.h / s.w;
     const angleRatio = Math.abs(dy / dx);
-
     let x, y;
-
-    if (angleRatio < sRatio) { // Intersects with left or right side
+    if (angleRatio < sRatio) {
         x = dx > 0 ? s.x + s.w : s.x;
         y = sCenter.y + (x - sCenter.x) * (dy/dx);
-    } else { // Intersects with top or bottom side
+    } else {
         y = dy > 0 ? s.y + s.h : s.y;
         x = sCenter.x + (y - sCenter.y) * (dx/dy);
     }
-
     return { x, y };
-}
+  }
+  
+  const visibleNodes = useMemo(() => {
+    const nodesArray = Array.from(nodes.values());
+    if (nodesArray.length < 20) return nodesArray; // No virtualization for small graphs
+    
+    const viewRect = {
+        x: -transform.x / transform.scale,
+        y: -transform.y / transform.scale,
+        width: viewport.width / transform.scale,
+        height: viewport.height / transform.scale
+    };
+
+    const buffer = 200; // Render nodes slightly outside the viewport
+
+    return nodesArray.filter(node => {
+        return (
+            node.position.x < viewRect.x + viewRect.width + buffer &&
+            node.position.x + node.width > viewRect.x - buffer &&
+            node.position.y < viewRect.y + viewRect.height + buffer &&
+            node.position.y + node.height > viewRect.y - buffer
+        );
+    });
+  }, [nodes, transform, viewport]);
 
   return (
     <div
       ref={canvasRef}
-      className="w-full h-full bg-grid-pattern cursor-grab active:cursor-grabbing"
+      className="w-full h-full bg-background cursor-grab active:cursor-grabbing"
       style={{
+        backgroundImage: 'radial-gradient(hsl(var(--border)) 1px, transparent 0)',
         backgroundSize: `${30 * transform.scale}px ${30 * transform.scale}px`,
         backgroundPosition: `${transform.x}px ${transform.y}px`,
-        '--grid-color': 'rgba(107, 114, 128, 0.2)',
-      } as React.CSSProperties}
+      }}
       onMouseDown={handleMouseDown}
       onWheel={handleWheel}
     >
@@ -147,23 +152,13 @@ const Canvas: React.FC<CanvasProps> = ({ nodes, onNodeMove, onNodeAdd, onNodeCon
                 
                 const d = `M${start.x},${start.y} C${start.x + (end.x - start.x) / 2},${start.y} ${start.x + (end.x - start.x) / 2},${end.y} ${end.x},${end.y}`;
 
-                return <path key={`${node.parentId}-${node.id}`} d={d} stroke="#4A5568" strokeWidth="2" fill="none" />;
+                return <path key={`${node.parentId}-${node.id}`} d={d} stroke="hsl(var(--border))" strokeWidth="2" fill="none" />;
               })}
         </svg>
 
-        {Array.from(nodes.values()).map(node => (
-          <Node
-            key={node.id}
-            data={node}
-            onMove={onNodeMove}
-            onAddNode={onNodeAdd}
-            onContentUpdate={onNodeContentUpdate}
-            onEditingChange={onNodeEditingChange}
-            onRegenerate={onNodeRegenerate}
-            onNodeSizeChange={onNodeSizeChange}
-          />
-        ))}
+        {visibleNodes.map(node => <Node key={node.id} data={node} />)}
       </div>
+      <MiniMap nodes={nodes} transform={transform} viewport={viewport} setTransform={setTransform} />
     </div>
   );
 };

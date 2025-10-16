@@ -4,41 +4,82 @@ import { PlusIcon } from './icons';
 import ActionMenu from './ActionMenu';
 import LoadingSpinner from './LoadingSpinner';
 import { NODE_HEIGHT, NODE_SPACING, NODE_WIDTH } from '../constants';
+import { useStore } from '../store';
 
 interface NodeProps {
   data: NodeData;
-  onMove: (id: string, position: Position) => void;
-  onAddNode: (parentId: string, action: ActionType, relativePosition: Position) => void;
-  onContentUpdate: (id: string, content: string) => void;
-  onEditingChange: (id: string, isEditing: boolean) => void;
-  onRegenerate: (nodeId: string) => void;
-  onNodeSizeChange: (id: string, size: { width: number; height: number; }) => void;
 }
 
 type MenuState = {
   visible: boolean;
   position: Position;
-  relativePosition: Position;
 };
 
-const Node: React.FC<NodeProps> = ({ data, onMove, onAddNode, onContentUpdate, onEditingChange, onRegenerate, onNodeSizeChange }) => {
+const Node: React.FC<NodeProps> = ({ data }) => {
+  const { 
+      updateNodePosition, 
+      addNode, 
+      updateNodeContent, 
+      toggleNodeEditing, 
+      regenerateNode, 
+      updateNodeSize,
+      openCustomPromptModal
+    } = useStore();
+
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const dragStartPos = useRef<Position>({ x: 0, y: 0 });
   const nodeRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const wasLoading = useRef(data.isLoading);
 
   const [editableContent, setEditableContent] = useState('');
-  const [menu, setMenu] = useState<MenuState>({ visible: false, position: {x:0, y:0}, relativePosition: {x:0, y:0} });
+  const [displayedContent, setDisplayedContent] = useState<NodeContent | null>(null);
+  const [menu, setMenu] = useState<MenuState & { relativePosition: Position }>({ visible: false, position: {x:0, y:0}, relativePosition: {x:0, y:0} });
 
-  useLayoutEffect(() => {
-    if (nodeRef.current && !isResizing) {
-        const currentHeight = nodeRef.current.offsetHeight;
-        if (data.height !== currentHeight) {
-             onNodeSizeChange(data.id, { width: data.width, height: currentHeight });
+  useEffect(() => {
+    const justFinishedLoading = wasLoading.current && !data.isLoading;
+
+    if (justFinishedLoading && data.content && typeof data.content !== 'string') {
+        setDisplayedContent([]); // Reset to start animation
+        const contentArray = data.content as NodeContent;
+        
+        let i = 0;
+        const interval = setInterval(() => {
+            setDisplayedContent(contentArray.slice(0, i + 1));
+            i++;
+            if (i > contentArray.length) {
+                clearInterval(interval);
+            }
+        }, 50); // Speed of line-by-line animation
+        
+        return () => clearInterval(interval);
+    } else if (!data.isLoading) {
+        // If not loading (e.g., initial render of existing node), show full content immediately
+        if (typeof data.content === 'string') {
+            setDisplayedContent([{type: 'paragraph', content: data.content}]);
+        } else {
+            setDisplayedContent(data.content as NodeContent);
         }
     }
-  }, [data.content, data.width, isResizing, data.id, onNodeSizeChange]);
+
+    wasLoading.current = data.isLoading;
+  }, [data.isLoading, data.content]);
+
+
+  useLayoutEffect(() => {
+    if (cardRef.current && !isResizing && !data.isLoading) {
+        // Measure the height required by the content
+        const contentHeight = cardRef.current.scrollHeight;
+        
+        // Only grow the card automatically to fit content, don't shrink it.
+        // Shrinking is a manual user action via the resize handle.
+        if (contentHeight > data.height) {
+             updateNodeSize(data.id, { width: data.width, height: contentHeight });
+        }
+    }
+  }, [data.content, data.width, isResizing, data.id, updateNodeSize, data.isLoading, displayedContent]);
 
   const resizeTextarea = () => {
     if (textareaRef.current) {
@@ -60,7 +101,6 @@ const Node: React.FC<NodeProps> = ({ data, onMove, onAddNode, onContentUpdate, o
         }).join('\n');
       }
       setEditableContent(textContent);
-      // Defer focus and resize to next tick to ensure textarea is rendered
       setTimeout(() => {
         textareaRef.current?.focus();
         resizeTextarea();
@@ -86,14 +126,12 @@ const Node: React.FC<NodeProps> = ({ data, onMove, onAddNode, onContentUpdate, o
     e.stopPropagation();
   };
 
-  // FIX: Added useCallback to memoize the function and fix reference errors.
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (isDragging) {
-      onMove(data.id, { x: e.clientX - dragStartPos.current.x, y: e.clientY - dragStartPos.current.y });
+      updateNodePosition(data.id, { x: e.clientX - dragStartPos.current.x, y: e.clientY - dragStartPos.current.y });
     }
-  }, [isDragging, data.id, onMove]);
+  }, [isDragging, data.id, updateNodePosition]);
 
-  // FIX: Added useCallback to memoize the function and fix reference errors.
   const handleMouseUp = useCallback(() => setIsDragging(false), []);
 
   useEffect(() => {
@@ -113,17 +151,15 @@ const Node: React.FC<NodeProps> = ({ data, onMove, onAddNode, onContentUpdate, o
     dragStartPos.current = { x: e.clientX, y: e.clientY };
   };
   
-  // FIX: Added useCallback to memoize the function and fix reference errors.
   const handleResizeMouseMove = useCallback((e: MouseEvent) => {
     if (isResizing) {
         const dx = e.clientX - dragStartPos.current.x;
         const dy = e.clientY - dragStartPos.current.y;
         dragStartPos.current = { x: e.clientX, y: e.clientY };
-        onNodeSizeChange(data.id, { width: Math.max(NODE_WIDTH, data.width + dx), height: Math.max(NODE_HEIGHT, data.height + dy) });
+        updateNodeSize(data.id, { width: Math.max(NODE_WIDTH, data.width + dx), height: Math.max(NODE_HEIGHT, data.height + dy) });
     }
-  }, [isResizing, data.id, data.width, data.height, onNodeSizeChange]);
+  }, [isResizing, data.id, data.width, data.height, updateNodeSize]);
 
-  // FIX: Added useCallback to memoize the function and fix reference errors.
   const handleResizeMouseUp = useCallback(() => setIsResizing(false), []);
 
   useEffect(() => {
@@ -137,8 +173,18 @@ const Node: React.FC<NodeProps> = ({ data, onMove, onAddNode, onContentUpdate, o
       };
   }, [isResizing, handleResizeMouseMove, handleResizeMouseUp]);
   
-  const handleContentBlur = () => onContentUpdate(data.id, editableContent);
-  const handleContentClick = () => onEditingChange(data.id, true);
+  const handleContentBlur = () => updateNodeContent(data.id, editableContent);
+  const handleContentClick = () => toggleNodeEditing(data.id, true);
+  
+  const handleActionSelect = (action: ActionType) => {
+      if (action === ActionType.REGENERATE) {
+          regenerateNode(data.id);
+      } else if (action === ActionType.CUSTOM_PROMPT) {
+          openCustomPromptModal(data.id, menu.relativePosition);
+      } else {
+          addNode(data.id, action, menu.relativePosition);
+      }
+  };
 
   const handleOpenMenu = (e: React.MouseEvent, pos: 'top' | 'right' | 'bottom' | 'left') => {
     e.stopPropagation();
@@ -149,23 +195,22 @@ const Node: React.FC<NodeProps> = ({ data, onMove, onAddNode, onContentUpdate, o
     const MENU_WIDTH = 256;
     const MENU_MAX_HEIGHT = 240;
     const MENU_MARGIN = 12;
-    const PLUS_BUTTON_HALF_SIZE = 12;
 
     switch(pos) {
         case 'top': 
-            menuPos = {x: width / 2 - MENU_WIDTH / 2, y: -PLUS_BUTTON_HALF_SIZE - MENU_MAX_HEIGHT - MENU_MARGIN };
+            menuPos = {x: data.width / 2 - MENU_WIDTH / 2, y: -MENU_MAX_HEIGHT - MENU_MARGIN };
             relativeNodePos = {x: 0, y: -(height + NODE_SPACING)};
             break;
         case 'right': 
-            menuPos = {x: width + PLUS_BUTTON_HALF_SIZE + MENU_MARGIN, y: height / 2 - MENU_MAX_HEIGHT / 2 };
-            relativeNodePos = {x: width + NODE_SPACING, y: 0};
+            menuPos = {x: data.width + MENU_MARGIN, y: data.height / 2 - MENU_MAX_HEIGHT / 2 };
+            relativeNodePos = {x: data.width + NODE_SPACING, y: 0};
             break;
         case 'bottom': 
-            menuPos = {x: width / 2 - MENU_WIDTH / 2, y: height + PLUS_BUTTON_HALF_SIZE + MENU_MARGIN };
-            relativeNodePos = {x: 0, y: height + NODE_SPACING};
+            menuPos = {x: data.width / 2 - MENU_WIDTH / 2, y: data.height + MENU_MARGIN };
+            relativeNodePos = {x: 0, y: data.height + NODE_SPACING};
             break;
         case 'left': 
-            menuPos = {x: -MENU_WIDTH - PLUS_BUTTON_HALF_SIZE - MENU_MARGIN, y: height / 2 - MENU_MAX_HEIGHT / 2 };
+            menuPos = {x: -MENU_WIDTH - MENU_MARGIN, y: data.height / 2 - MENU_MAX_HEIGHT / 2 };
             relativeNodePos = {x: -(data.width + NODE_SPACING), y: 0};
             break;
     }
@@ -175,21 +220,24 @@ const Node: React.FC<NodeProps> = ({ data, onMove, onAddNode, onContentUpdate, o
   const handleCloseMenu = () => setMenu({ ...menu, visible: false });
   
   const PlusButton: React.FC<{pos: 'top' | 'right' | 'bottom' | 'left'}> = ({pos}) => {
-      const posClasses = { top: 'top-0 left-1/2 -translate-x-1/2 -translate-y-1/2', right: 'top-1/2 right-0 -translate-y-1/2 translate-x-1/2', bottom: 'bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2', left: 'top-1/2 left-0 -translate-y-1/2 -translate-x-1/2' };
-      return <button onClick={(e) => handleOpenMenu(e, pos)} className={`absolute ${posClasses[pos]} z-10 flex items-center justify-center w-6 h-6 bg-indigo-500 rounded-full text-white transition-transform duration-200 transform hover:scale-125 hover:bg-indigo-400 opacity-0 group-hover:opacity-100`}><PlusIcon className="w-4 h-4"/></button>;
+      const posClasses = { top: 'top-0 left-1/2 -translate-x-1/2 -translate-y-full', right: 'top-1/2 right-0 -translate-y-1/2 translate-x-full', bottom: 'bottom-0 left-1/2 -translate-x-1/2 translate-y-full', left: 'top-1/2 left-0 -translate-y-1/2 -translate-x-full' };
+      return <button onClick={(e) => handleOpenMenu(e, pos)} className={`absolute ${posClasses[pos]} z-10 flex items-center justify-center w-6 h-6 bg-primary text-primary-foreground rounded-full transition-all duration-200 transform hover:scale-110 opacity-0 group-hover:opacity-100`}><PlusIcon className="w-4 h-4"/></button>;
   };
   
   const renderContent = () => {
-    if (typeof data.content === 'string') {
-        return <div className="node-content-display text-sm text-gray-300 flex-grow overflow-y-auto cursor-text" onClick={handleContentClick} dangerouslySetInnerHTML={{ __html: data.content.replace(/\n/g, '<br/>') }} />;
+    if (data.isLoading) {
+        return <div className="absolute inset-0 bg-card/75 flex items-center justify-center rounded-lg"><LoadingSpinner /></div>;
     }
+
+    const contentToRender = displayedContent || [];
+
     return (
-        <div className="node-content-display text-sm text-gray-300 flex-grow overflow-y-auto cursor-text space-y-2" onClick={handleContentClick}>
-            {data.content.map((item, index) => {
+        <div className="node-content-display text-base text-card-foreground flex-grow overflow-y-auto cursor-text space-y-2" onClick={handleContentClick}>
+            {contentToRender.map((item, index) => {
                 switch(item.type) {
-                    case 'heading': return <h4 key={index} className="text-md font-bold text-gray-100">{item.content}</h4>;
-                    case 'bullet': return <li key={index} className="ml-4 list-disc text-gray-300">{item.content}</li>;
-                    case 'paragraph': return <p key={index} className="text-gray-300">{item.content}</p>;
+                    case 'heading': return <h4 key={index} className="text-md font-bold text-card-foreground">{item.content}</h4>;
+                    case 'bullet': return <li key={index} className="ml-4 list-disc">{item.content}</li>;
+                    case 'paragraph': return <p key={index}>{item.content}</p>;
                     default: return null;
                 }
             })}
@@ -199,20 +247,19 @@ const Node: React.FC<NodeProps> = ({ data, onMove, onAddNode, onContentUpdate, o
 
   return (
     <div ref={nodeRef} className="absolute group" style={{ left: data.position.x, top: data.position.y, width: `${data.width}px`, height: `${data.height}px`, cursor: isDragging ? 'grabbing' : 'grab' }} onMouseDown={handleMouseDown}>
-        <div className="relative w-full h-full p-4 bg-gray-800 border-2 border-gray-700 rounded-lg shadow-lg flex flex-col transition-all duration-200 hover:border-indigo-500">
-            <h3 className="text-lg font-bold text-gray-100 pb-2 border-b border-gray-600 mb-2 flex-shrink-0">{data.title}</h3>
+        <div ref={cardRef} className="relative w-full h-full p-4 bg-card border-2 border-border rounded-lg shadow-lg flex flex-col transition-all duration-200 hover:border-ring">
+            <h3 className="text-lg font-bold text-card-foreground pb-2 border-b border-border mb-2 flex-shrink-0">{data.title}</h3>
             
             {data.isEditing ? (
-                 <textarea ref={textareaRef} value={editableContent} onChange={(e) => setEditableContent(e.target.value)} onBlur={handleContentBlur} onInput={resizeTextarea} className="node-content text-sm text-gray-300 flex-grow bg-transparent w-full resize-none focus:outline-none" onClick={(e) => e.stopPropagation()} />
+                 <textarea ref={textareaRef} value={editableContent} onChange={(e) => setEditableContent(e.target.value)} onBlur={handleContentBlur} onInput={resizeTextarea} className="node-content text-base text-card-foreground flex-grow bg-transparent w-full resize-none focus:outline-none" onClick={(e) => e.stopPropagation()} />
             ) : renderContent()}
-            
-            {data.isLoading && (<div className="absolute inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center rounded-lg"><LoadingSpinner /></div>)}
-            <div onMouseDown={handleResizeMouseDown} className="resize-handle absolute bottom-0 right-0 w-4 h-4 cursor-se-resize opacity-0 group-hover:opacity-50 hover:opacity-100 transition-opacity" style={{background: 'radial-gradient(circle at 100% 100%, transparent 50%, #fff 50%)'}}/>
+
+            <div onMouseDown={handleResizeMouseDown} className="resize-handle absolute bottom-0 right-0 w-4 h-4 cursor-se-resize opacity-0 group-hover:opacity-50 hover:opacity-100 transition-opacity" style={{background: 'radial-gradient(circle at 100% 100%, transparent 50%, hsl(var(--foreground)) 50%)'}}/>
+        
+            {!data.isLoading && (<><PlusButton pos="top" /><PlusButton pos="right" /><PlusButton pos="bottom" /><PlusButton pos="left" /></>)}
         </div>
 
-        {!data.isLoading && (<><PlusButton pos="top" /><PlusButton pos="right" /><PlusButton pos="bottom" /><PlusButton pos="left" /></>)}
-        
-        {menu.visible && (<div style={{ position: 'absolute', top: menu.position.y, left: menu.position.x, zIndex: 100 }} ><ActionMenu actions={data.availableActions} onSelect={(action) => onAddNode(data.id, action, menu.relativePosition)} onClose={handleCloseMenu} onRegenerate={() => onRegenerate(data.id)} /></div>)}
+        {menu.visible && (<div style={{ position: 'absolute', top: menu.position.y, left: menu.position.x, zIndex: 100 }} ><ActionMenu actions={data.availableActions} onSelect={handleActionSelect} onClose={handleCloseMenu} onRegenerate={() => {}} /></div>)}
     </div>
   );
 };

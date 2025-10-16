@@ -29,6 +29,7 @@ export enum ActionType {
   MAP_GTM_PLAN = 'Map Go-To-Market Plan',
   GENERATE_TODO_LIST = 'Generate Phase-based To-Do List',
   REGENERATE = 'Regenerate',
+  CUSTOM_PROMPT = 'Custom Prompt',
 }
 
 export interface NodeData {
@@ -52,4 +53,32 @@ export interface ExportSection {
   content: string | NodeContent;
   status: ExportSectionStatus;
   enabled: boolean;
+}
+
+export type Theme = 'light' | 'dark';
+
+export interface VynixelState {
+    nodes: Map<string, NodeData>;
+    theme: Theme;
+    isExportModalOpen: boolean;
+    exportSections: ExportSection[];
+    isCustomPromptModalOpen: boolean;
+    customPromptParentNode: { parentId: string, relativePosition: Position } | null;
+    initializeNodes: () => void;
+    updateNodePosition: (id: string, newPosition: Position) => void;
+    updateNodeContent: (id: string, content: string) => void;
+    updateNodeSize: (id: string, size: { width: number; height: number }) => void;
+    toggleNodeEditing: (id: string, isEditing: boolean) => void;
+    addNode: (parentId: string, action: ActionType, relativePosition: Position) => Promise<void>;
+    regenerateNode: (nodeId: string) => Promise<void>;
+    analyzeBlueprint: () => Promise<void>;
+    openCustomPromptModal: (parentId: string, relativePosition: Position) => void;
+    closeCustomPromptModal: () => void;
+    addCustomNode: (title: string, prompt: string) => Promise<void>;
+    toggleTheme: () => void;
+    openExportModal: () => void;
+    closeExportModal: () => void;
+    setExportSections: (sections: ExportSection[]) => void;
+    generateMissingSection: (section: ExportSection) => Promise<void>;
+    exportToPdf: () => void;
 }

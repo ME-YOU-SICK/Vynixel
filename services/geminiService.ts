@@ -24,12 +24,8 @@ const responseSchema = {
 
 function getPromptForAction(idea: string, action: ActionType): string {
   const basePrompt = `You are an expert startup consultant. Based on the following startup idea: "${idea}"\n\n`;
-  
-  // The instruction about the output format is now handled by the responseSchema,
-  // but we can still guide the AI in the prompt.
   const instruction = `Generate content for the action: "${action}".`;
 
-  // Specific prompts are still valuable to guide the content generation.
   switch (action) {
     case ActionType.EXPAND_IDEA:
       return `${basePrompt}Expand and refine this idea. Describe the core value proposition, key features, and what makes it unique.`;
@@ -70,68 +66,66 @@ function getPromptForAction(idea: string, action: ActionType): string {
   }
 }
 
-export const generateNodeContent = async (parentContent: string, action: ActionType): Promise<NodeContent> => {
-    if (!process.env.API_KEY) {
-        // Return a structured error message
-        return Promise.resolve([
-            { type: 'heading', content: 'Configuration Error' },
-            { type: 'paragraph', content: 'API Key not configured. Please set up your environment variable.' }
-        ]);
-    }
-
-    try {
-        const prompt = getPromptForAction(parentContent, action);
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema,
-            }
-        });
-
-        const jsonText = response.text.trim();
-        return JSON.parse(jsonText) as NodeContent;
-
-    } catch (error) {
-        console.error("Error generating content with Gemini API:", error);
-        // Throw a new error to be caught by the calling function in App.tsx
-        throw new Error("Failed to generate structured content from AI.");
-    }
-};
-
-export const generateMissingDocument = async (context: string, missingAction: ActionType): Promise<NodeContent> => {
+const generateJSON = async (prompt: string): Promise<NodeContent> => {
     if (!process.env.API_KEY) {
         return Promise.resolve([
             { type: 'heading', content: 'Configuration Error' },
             { type: 'paragraph', content: 'API Key not configured.' }
         ]);
     }
-
     try {
-        const prompt = `You are a startup consultant synthesizing a business plan.
-        You have the following context from an existing business plan:
-        ---
-        ${context}
-        ---
-        
-        Based on all the information above, generate the content for the following missing section: "${missingAction}".
-        Make sure the new section is consistent with the provided context. Structure your response clearly with headings, paragraphs, and bullet points.`;
-        
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema,
-            }
+            config: { responseMimeType: "application/json", responseSchema }
         });
-
-        const jsonText = response.text.trim();
-        return JSON.parse(jsonText) as NodeContent;
-
+        return JSON.parse(response.text.trim()) as NodeContent;
     } catch (error) {
-        console.error("Error generating missing document with Gemini API:", error);
-        throw new Error("Failed to generate structured content for missing document.");
+        console.error("Error generating JSON content:", error);
+        throw new Error("Failed to generate structured content from AI.");
     }
+};
+
+export async function* generateContentStream(prompt: string): AsyncGenerator<string, void, unknown> {
+    if (!process.env.API_KEY) {
+        yield '{"error": "API Key not configured."}';
+        return;
+    }
+    try {
+        const response = await ai.models.generateContentStream({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: { responseMimeType: "application/json", responseSchema }
+        });
+        for await (const chunk of response) {
+            yield chunk.text;
+        }
+    } catch (error) {
+        console.error("Error in streaming generation:", error);
+        yield `[{"type": "heading", "content": "Error"}, {"type": "paragraph", "content": "Failed to stream content."}]`;
+    }
+}
+
+export const generateNodeContentStream = (parentContent: string, action: ActionType) => {
+    const prompt = getPromptForAction(parentContent, action);
+    return generateContentStream(prompt);
+};
+
+export const generateCustomPromptContent = (parentContent: string, customPrompt: string) => {
+    const prompt = `You are an expert startup consultant. Based on the following context: "${parentContent}"\n\nFulfill this request: "${customPrompt}"`;
+    return generateContentStream(prompt);
+}
+
+export const generateMissingDocument = (context: string, missingAction: ActionType) => {
+    const prompt = `You are a startup consultant synthesizing a business plan. You have the following context from an existing business plan:\n---\n${context}\n---\n\nBased on all the information above, generate the content for the following missing section: "${missingAction}". Make sure the new section is consistent with the provided context.`;
+    return generateContentStream(prompt);
+};
+
+export const getBlueprintCritique = (context: string): Promise<NodeContent> => {
+    const prompt = `You are an expert startup strategist. Analyze the following startup blueprint and provide a high-level critique. Identify potential gaps, logical inconsistencies, and risks. Finally, suggest 2-3 actionable next steps.
+    ---
+    ${context}
+    ---
+    Structure your response with clear headings for "Critique", "Identified Gaps", and "Suggested Next Steps".`;
+    return generateJSON(prompt);
 };
