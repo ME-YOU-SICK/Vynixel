@@ -6,21 +6,23 @@ import SmallLoadingSpinner from './SmallLoadingSpinner';
 import { useStore } from '../store';
 
 const printStyles = `
-  body.light-print, body.dark-print {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
-    --border: 240 5.9% 90%;
-    --muted-foreground: 240 3.8% 46.1%;
+  body.dark-print {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    --border: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
   }
   
   .export-preview {
       font-family: Inter, system-ui, sans-serif;
+      background-color: hsl(var(--background));
+      color: hsl(var(--foreground));
   }
   .export-preview h1, .export-preview h2, .export-preview h3, .export-preview h4 { color: hsl(var(--foreground)); }
   .export-preview p, .export-preview li, .export-preview td, .export-preview th { color: hsl(var(--muted-foreground)); }
   .export-preview table { width: 100%; border-collapse: collapse; margin-top: 8px; margin-bottom: 8px; }
   .export-preview th, .export-preview td { border: 1px solid hsl(var(--border)); padding: 8px; text-align: left; }
-  .export-preview th { font-weight: 600; }
+  .export-preview th { font-weight: 600; color: hsl(var(--foreground)); }
   .export-preview tr { break-inside: avoid; }
   .export-preview .blueprint-section { break-inside: avoid-page; page-break-before: auto; }
   .export-preview .quiz-question { break-inside: avoid; padding: 8px; border-radius: 4px; border: 1px solid hsl(var(--border)); margin-top: 8px;}
@@ -69,7 +71,7 @@ const formatContentForPreview = (section: ExportSection): string => {
                     text += '<ul class="list-none pl-4 mt-1 space-y-1">';
                     q.options.forEach(opt => {
                         const isChecked = answers[i] === opt;
-                        text += `<li class="py-0.5">${isChecked ? '<strong>&#9679; ' : '&#9675; '}${opt}${isChecked ? '</strong>' : ''}</li>`;
+                        text += `<li class="py-0.5" style="color: ${isChecked ? 'hsl(var(--foreground))' : 'hsl(var(--muted-foreground))'}">${isChecked ? '<strong>&#9679; ' : '&#9675; '}${opt}${isChecked ? '</strong>' : ''}</li>`;
                     });
                     text += '</ul>';
                 }
@@ -97,7 +99,6 @@ const ExportModal: React.FC = () => {
     setExportSections: setSections,
     closeExportModal,
     generateMissingSection,
-    theme
    } = useStore();
   
   const [isExporting, setIsExporting] = useState(false);
@@ -136,7 +137,7 @@ const ExportModal: React.FC = () => {
     setIsExporting(true);
 
     const originalBodyClass = document.body.className;
-    document.body.className = theme === 'dark' ? 'dark-print' : 'light-print';
+    document.body.className = 'dark-print';
     
     const pdf = new jsPDF('p', 'pt', 'a4');
 
@@ -152,7 +153,7 @@ const ExportModal: React.FC = () => {
         html2canvas: {
             scale: 0.75,
             useCORS: true,
-            backgroundColor: theme === 'dark' ? '#ffffff' : '#ffffff', // Always use white background for PDF
+            backgroundColor: '#0a0a0f',
         },
         width: 595 - 80, // A4 width in points minus margins
         windowWidth: 1024,

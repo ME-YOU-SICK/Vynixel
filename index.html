@@ -88,6 +88,13 @@
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
       }
+
+      .glow-effect {
+        transition: box-shadow 0.2s ease-in-out;
+      }
+      .group:hover .glow-effect {
+        box-shadow: 0 0 15px hsl(var(--ring) / 0.25);
+      }
     </style>
   <script type="importmap">
 {

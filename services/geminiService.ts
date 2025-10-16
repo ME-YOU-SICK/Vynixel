@@ -1,7 +1,8 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { ActionType, NodeContent } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+// FIX: Removed 'as string' to align with Gemini API guidelines. The environment variable is assumed to be set.
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 const textResponseSchema = {
     type: Type.ARRAY,

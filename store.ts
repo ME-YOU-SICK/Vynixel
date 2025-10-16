@@ -6,7 +6,7 @@ import {
     getBlueprintCritique,
     generateCustomPromptContent 
 } from './services/geminiService';
-import { initialActions, NODE_WIDTH, NODE_HEIGHT } from './constants';
+import { initialActions, NODE_WIDTH, NODE_HEIGHT, NODE_SPACING } from './constants';
 
 const getNodeTypeForAction = (action: ActionType): NodeType => {
     switch (action) {
@@ -61,7 +61,9 @@ const formatNodeContentForExport = (node: { content: NodeData['content'], nodeTy
     }
 };
 
-const parseContent = (text: string): any => {
+// FIX: Replaced 'any' with a specific type union to prevent type inference issues downstream.
+// This resolves the error where 'string' was not assignable to 'ExportSectionStatus'.
+const parseContent = (text: string): NodeContent | TableContent | QuizContent => {
     try {
         return JSON.parse(text);
     } catch (e) {
@@ -379,15 +381,15 @@ export const useStore = create<VynixelState>((set, get) => ({
     setExportSections: (sections) => set({ exportSections: sections }),
     
     generateMissingSection: async (sectionToGenerate) => {
-        const { exportSections } = get();
+        set(state => ({
+            exportSections: state.exportSections.map(s => s.id === sectionToGenerate.id ? { ...s, status: 'generating' } : s)
+        }));
+
+        const { nodes, exportSections } = get();
         const context = exportSections
             .filter(s => s.enabled && s.status !== 'missing')
             .map(s => `## ${s.title}\n\n${formatNodeContentForExport(s)}`)
             .join('\n\n---\n\n');
-
-        set(state => ({
-            exportSections: state.exportSections.map(s => s.id === sectionToGenerate.id ? { ...s, status: 'generating' } : s)
-        }));
 
         let accumulatedText = "";
         try {
@@ -396,9 +398,62 @@ export const useStore = create<VynixelState>((set, get) => ({
                 accumulatedText += chunk;
             }
             const newContent = parseContent(accumulatedText);
-            set(state => ({
-                exportSections: state.exportSections.map(s => s.id === sectionToGenerate.id ? { ...s, content: newContent, status: 'generated', enabled: true } : s)
-            }));
+
+            // Add the new node to the canvas
+            let anchorNode: NodeData | null = null;
+            const currentSectionIndex = get().exportSections.findIndex(s => s.id === sectionToGenerate.id);
+
+            for (let i = currentSectionIndex - 1; i >= 0; i--) {
+                const prevSection = get().exportSections[i];
+                if (prevSection.status === 'included' || prevSection.status === 'generated') {
+                    const potentialAnchor = get().nodes.get(prevSection.id);
+                    if (potentialAnchor) {
+                        anchorNode = potentialAnchor;
+                        break;
+                    }
+                }
+            }
+            if (!anchorNode) {
+                anchorNode = Array.from(get().nodes.values()).find(n => n.parentId === null) || null;
+            }
+
+            if(anchorNode) {
+                const newNodeId = `node_${Date.now()}`;
+                const newPosition: Position = {
+                    x: anchorNode.position.x,
+                    y: anchorNode.position.y + anchorNode.height + NODE_SPACING
+                };
+                const newNode: NodeData = {
+                    id: newNodeId,
+                    title: sectionToGenerate.title,
+                    content: newContent,
+                    nodeType: getNodeTypeForAction(sectionToGenerate.title as ActionType),
+                    position: newPosition,
+                    parentId: anchorNode.id,
+                    isEditing: false,
+                    isLoading: false,
+                    availableActions: initialActions,
+                    width: NODE_WIDTH,
+                    height: NODE_HEIGHT,
+                    answers: sectionToGenerate.answers
+                };
+
+                set(state => {
+                    const newNodes = new Map(state.nodes).set(newNodeId, newNode);
+                    const newExportSections = state.exportSections.map(s => 
+                        s.id === sectionToGenerate.id 
+                        ? { ...s, id: newNodeId, content: newContent, status: 'generated', enabled: true } 
+                        : s
+                    );
+                    return { nodes: newNodes, exportSections: newExportSections };
+                });
+            } else {
+                 // Fallback if no anchor is found (should be rare)
+                 set(state => ({
+                    exportSections: state.exportSections.map(s => s.id === sectionToGenerate.id ? { ...s, content: newContent, status: 'generated', enabled: true } : s)
+                }));
+            }
+
         } catch (error) {
             console.error("Failed to generate missing document:", error);
             set(state => ({
