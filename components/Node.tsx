@@ -3,7 +3,7 @@ import { NodeData, Position, ActionType } from '../types';
 import { PlusIcon } from './icons';
 import ActionMenu from './ActionMenu';
 import LoadingSpinner from './LoadingSpinner';
-import { NODE_WIDTH, NODE_SPACING } from '../constants';
+import { NODE_HEIGHT, NODE_SPACING } from '../constants';
 
 interface NodeProps {
   data: NodeData;
@@ -25,21 +25,20 @@ const Node: React.FC<NodeProps> = ({ data, onMove, onAddNode, onContentUpdate, o
   const [isDragging, setIsDragging] = useState(false);
   const dragStartPos = useRef<Position>({ x: 0, y: 0 });
   const nodeRef = useRef<HTMLDivElement>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const [editableContent, setEditableContent] = useState('');
   const [menu, setMenu] = useState<MenuState>({ visible: false, position: {x:0, y:0}, relativePosition: {x:0, y:0} });
 
-  // Measure and report size changes
+  // Stable size measurement: Let the component render and measure its actual height.
   useLayoutEffect(() => {
-    if (contentRef.current) {
-        const { offsetWidth, offsetHeight } = contentRef.current;
-        if (offsetWidth > 0 && offsetHeight > 0 && (data.width !== offsetWidth || data.height !== offsetHeight)) {
-            onNodeSizeChange(data.id, { width: offsetWidth, height: offsetHeight });
+    if (nodeRef.current) {
+        const newHeight = nodeRef.current.offsetHeight;
+        if (data.height !== newHeight) {
+            onNodeSizeChange(data.id, { width: data.width, height: newHeight });
         }
     }
-  }, [data.content, data.id, data.width, data.height, onNodeSizeChange]);
+  }, [data.content, data.width, data.height, onNodeSizeChange, data.id]);
 
 
   useEffect(() => {
@@ -68,7 +67,7 @@ const Node: React.FC<NodeProps> = ({ data, onMove, onAddNode, onContentUpdate, o
 
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (data.isEditing || (e.target as HTMLElement).closest('.node-content-display') || (e.target as HTMLElement).closest('textarea')) return;
+    if (data.isEditing || (e.target as HTMLElement).closest('.node-content-display') || (e.target as HTMLElement).closest('textarea') || (e.target as HTMLElement).closest('button')) return;
     setIsDragging(true);
     dragStartPos.current = {
       x: e.clientX - data.position.x,
@@ -172,15 +171,13 @@ const Node: React.FC<NodeProps> = ({ data, onMove, onAddNode, onContentUpdate, o
         left: data.position.x,
         top: data.position.y,
         width: `${data.width}px`,
-        height: `${data.height}px`,
         cursor: isDragging ? 'grabbing' : 'grab',
       }}
       onMouseDown={handleMouseDown}
     >
         <div 
-          ref={contentRef}
-          className="relative w-full h-full p-4 bg-gray-800 border-2 border-gray-700 rounded-lg shadow-lg flex flex-col transition-all duration-200 hover:border-indigo-500"
-          style={{ width: `${NODE_WIDTH}px`}}
+          className="relative w-full p-4 bg-gray-800 border-2 border-gray-700 rounded-lg shadow-lg flex flex-col transition-all duration-200 hover:border-indigo-500"
+          style={{ minHeight: `${NODE_HEIGHT}px`}}
         >
             <h3 className="text-lg font-bold text-gray-100 pb-2 border-b border-gray-600 mb-2 flex-shrink-0">{data.title}</h3>
             
