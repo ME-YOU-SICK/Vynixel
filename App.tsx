@@ -1,10 +1,9 @@
-
 import React, { useState, useCallback } from 'react';
 import { NodeData, Position, ActionType } from './types';
 import { generateNodeContent } from './services/geminiService';
 import Canvas from './components/Canvas';
 import Header from './components/Header';
-import { initialActions } from './constants';
+import { initialActions, NODE_WIDTH, NODE_HEIGHT } from './constants';
 
 const App: React.FC = () => {
   const [nodes, setNodes] = useState<Map<string, NodeData>>(() => {
@@ -18,6 +17,8 @@ const App: React.FC = () => {
       isEditing: false,
       isLoading: false,
       availableActions: initialActions,
+      width: NODE_WIDTH,
+      height: NODE_HEIGHT,
     };
     return new Map([[initialNodeId, initialNode]]);
   });
@@ -41,6 +42,18 @@ const App: React.FC = () => {
         newNodes.set(id, { ...node, content, isEditing: false });
       }
       return newNodes;
+    });
+  }, []);
+
+  const updateNodeSize = useCallback((id: string, size: { width: number, height: number }) => {
+    setNodes(prevNodes => {
+        const newNodes = new Map(prevNodes);
+        const node = newNodes.get(id);
+        if (node && (node.width !== size.width || node.height !== size.height)) {
+            newNodes.set(id, { ...node, width: size.width, height: size.height });
+            return newNodes;
+        }
+        return prevNodes;
     });
   }, []);
 
@@ -72,6 +85,8 @@ const App: React.FC = () => {
       isEditing: false,
       isLoading: true,
       availableActions: initialActions.filter(a => a !== ActionType.REGENERATE),
+      width: NODE_WIDTH,
+      height: NODE_HEIGHT,
     };
 
     setNodes(prevNodes => new Map(prevNodes).set(newNodeId, newNode));
@@ -148,6 +163,7 @@ const App: React.FC = () => {
         onNodeContentUpdate={updateNodeContent}
         onNodeEditingChange={toggleNodeEditing}
         onNodeRegenerate={regenerateNode}
+        onNodeSizeChange={updateNodeSize}
       />
     </div>
   );

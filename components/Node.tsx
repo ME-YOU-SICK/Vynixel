@@ -1,9 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { NodeData, Position, ActionType } from '../types';
 import { PlusIcon } from './icons';
 import ActionMenu from './ActionMenu';
 import LoadingSpinner from './LoadingSpinner';
-import { NODE_WIDTH, NODE_HEIGHT, NODE_SPACING } from '../constants';
+import { NODE_WIDTH, NODE_SPACING } from '../constants';
 
 interface NodeProps {
   data: NodeData;
@@ -12,6 +12,7 @@ interface NodeProps {
   onContentUpdate: (id: string, content: string) => void;
   onEditingChange: (id: string, isEditing: boolean) => void;
   onRegenerate: (nodeId: string) => void;
+  onNodeSizeChange: (id: string, size: { width: number; height: number; }) => void;
 }
 
 type MenuState = {
@@ -20,19 +21,29 @@ type MenuState = {
   relativePosition: Position;
 };
 
-const Node: React.FC<NodeProps> = ({ data, onMove, onAddNode, onContentUpdate, onEditingChange, onRegenerate }) => {
+const Node: React.FC<NodeProps> = ({ data, onMove, onAddNode, onContentUpdate, onEditingChange, onRegenerate, onNodeSizeChange }) => {
   const [isDragging, setIsDragging] = useState(false);
   const dragStartPos = useRef<Position>({ x: 0, y: 0 });
   const nodeRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const [editableContent, setEditableContent] = useState('');
-
   const [menu, setMenu] = useState<MenuState>({ visible: false, position: {x:0, y:0}, relativePosition: {x:0, y:0} });
+
+  // Measure and report size changes
+  useLayoutEffect(() => {
+    if (contentRef.current) {
+        const { offsetWidth, offsetHeight } = contentRef.current;
+        if (offsetWidth > 0 && offsetHeight > 0 && (data.width !== offsetWidth || data.height !== offsetHeight)) {
+            onNodeSizeChange(data.id, { width: offsetWidth, height: offsetHeight });
+        }
+    }
+  }, [data.content, data.id, data.width, data.height, onNodeSizeChange]);
+
 
   useEffect(() => {
     if (data.isEditing) {
-      // Convert HTML content to plain text for textarea
       const textContent = data.content
         .replace(/<br\s*\/?>/gi, '\n')
         .replace(/<strong>/gi, '')
@@ -42,17 +53,13 @@ const Node: React.FC<NodeProps> = ({ data, onMove, onAddNode, onContentUpdate, o
     }
   }, [data.isEditing, data.content]);
   
-  // Effect to handle clicks outside the action menu
   useEffect(() => {
     if (!menu.visible) return;
-
     const handleClickOutside = (event: MouseEvent) => {
-        // Close if the click is outside the node which contains the menu
         if (nodeRef.current && !nodeRef.current.contains(event.target as Node)) {
             handleCloseMenu();
         }
     };
-
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
         document.removeEventListener('mousedown', handleClickOutside);
@@ -61,7 +68,6 @@ const Node: React.FC<NodeProps> = ({ data, onMove, onAddNode, onContentUpdate, o
 
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    // Only drag if not editing content
     if (data.isEditing || (e.target as HTMLElement).closest('.node-content-display') || (e.target as HTMLElement).closest('textarea')) return;
     setIsDragging(true);
     dragStartPos.current = {
@@ -93,11 +99,9 @@ const Node: React.FC<NodeProps> = ({ data, onMove, onAddNode, onContentUpdate, o
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isDragging, data.id, onMove]);
   
   const handleContentBlur = () => {
-    // Convert plain text back to simple HTML
     const newHtmlContent = editableContent.replace(/\n/g, '<br />');
     onContentUpdate(data.id, newHtmlContent);
   };
@@ -116,22 +120,25 @@ const Node: React.FC<NodeProps> = ({ data, onMove, onAddNode, onContentUpdate, o
     const MENU_MARGIN = 12;
     const PLUS_BUTTON_HALF_SIZE = 12;
 
+    const nodeWidth = data.width;
+    const nodeHeight = data.height;
+
     switch(pos) {
         case 'top': 
-            menuPos = {x: NODE_WIDTH / 2 - MENU_WIDTH / 2, y: -PLUS_BUTTON_HALF_SIZE - MENU_MAX_HEIGHT - MENU_MARGIN };
-            relativeNodePos = {x: 0, y: -(NODE_HEIGHT + NODE_SPACING)};
+            menuPos = {x: nodeWidth / 2 - MENU_WIDTH / 2, y: -PLUS_BUTTON_HALF_SIZE - MENU_MAX_HEIGHT - MENU_MARGIN };
+            relativeNodePos = {x: 0, y: -(nodeHeight + NODE_SPACING)};
             break;
         case 'right': 
-            menuPos = {x: NODE_WIDTH + PLUS_BUTTON_HALF_SIZE + MENU_MARGIN, y: NODE_HEIGHT / 2 - MENU_MAX_HEIGHT / 2 };
-            relativeNodePos = {x: NODE_WIDTH + NODE_SPACING, y: 0};
+            menuPos = {x: nodeWidth + PLUS_BUTTON_HALF_SIZE + MENU_MARGIN, y: nodeHeight / 2 - MENU_MAX_HEIGHT / 2 };
+            relativeNodePos = {x: nodeWidth + NODE_SPACING, y: 0};
             break;
         case 'bottom': 
-            menuPos = {x: NODE_WIDTH / 2 - MENU_WIDTH / 2, y: NODE_HEIGHT + PLUS_BUTTON_HALF_SIZE + MENU_MARGIN };
-            relativeNodePos = {x: 0, y: NODE_HEIGHT + NODE_SPACING};
+            menuPos = {x: nodeWidth / 2 - MENU_WIDTH / 2, y: nodeHeight + PLUS_BUTTON_HALF_SIZE + MENU_MARGIN };
+            relativeNodePos = {x: 0, y: nodeHeight + NODE_SPACING};
             break;
         case 'left': 
-            menuPos = {x: -MENU_WIDTH - PLUS_BUTTON_HALF_SIZE - MENU_MARGIN, y: NODE_HEIGHT / 2 - MENU_MAX_HEIGHT / 2 };
-            relativeNodePos = {x: -(NODE_WIDTH + NODE_SPACING), y: 0};
+            menuPos = {x: -MENU_WIDTH - PLUS_BUTTON_HALF_SIZE - MENU_MARGIN, y: nodeHeight / 2 - MENU_MAX_HEIGHT / 2 };
+            relativeNodePos = {x: -(nodeWidth + NODE_SPACING), y: 0};
             break;
     }
     setMenu({ visible: true, position: menuPos, relativePosition: relativeNodePos });
@@ -164,13 +171,17 @@ const Node: React.FC<NodeProps> = ({ data, onMove, onAddNode, onContentUpdate, o
       style={{
         left: data.position.x,
         top: data.position.y,
-        width: `${NODE_WIDTH}px`,
-        minHeight: `${NODE_HEIGHT}px`,
+        width: `${data.width}px`,
+        height: `${data.height}px`,
         cursor: isDragging ? 'grabbing' : 'grab',
       }}
       onMouseDown={handleMouseDown}
     >
-        <div className="relative w-full h-full p-4 bg-gray-800 border-2 border-gray-700 rounded-lg shadow-lg flex flex-col transition-all duration-200 hover:border-indigo-500">
+        <div 
+          ref={contentRef}
+          className="relative w-full h-full p-4 bg-gray-800 border-2 border-gray-700 rounded-lg shadow-lg flex flex-col transition-all duration-200 hover:border-indigo-500"
+          style={{ width: `${NODE_WIDTH}px`}}
+        >
             <h3 className="text-lg font-bold text-gray-100 pb-2 border-b border-gray-600 mb-2 flex-shrink-0">{data.title}</h3>
             
             {data.isEditing ? (
@@ -179,14 +190,12 @@ const Node: React.FC<NodeProps> = ({ data, onMove, onAddNode, onContentUpdate, o
                     value={editableContent}
                     onChange={(e) => setEditableContent(e.target.value)}
                     onBlur={handleContentBlur}
-                    className="node-content text-sm text-gray-300 flex-grow bg-gray-700 rounded p-1 w-full resize-none focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                    style={{ maxHeight: '150px' }}
+                    className="node-content text-sm text-gray-300 flex-grow bg-transparent w-full resize-none focus:outline-none"
                     onClick={(e) => e.stopPropagation()}
                 />
             ) : (
                 <div
                     className="node-content-display text-sm text-gray-300 flex-grow overflow-y-auto cursor-text"
-                    style={{ maxHeight: '150px' }}
                     onClick={handleContentClick}
                     dangerouslySetInnerHTML={{ __html: data.content }}
                 />

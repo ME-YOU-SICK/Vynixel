@@ -1,8 +1,6 @@
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { NodeData, Position, ActionType } from '../types';
 import Node from './Node';
-import { NODE_WIDTH, NODE_HEIGHT } from '../constants';
 
 interface CanvasProps {
   nodes: Map<string, NodeData>;
@@ -11,9 +9,10 @@ interface CanvasProps {
   onNodeContentUpdate: (id: string, content: string) => void;
   onNodeEditingChange: (id: string, isEditing: boolean) => void;
   onNodeRegenerate: (nodeId: string) => void;
+  onNodeSizeChange: (id: string, size: { width: number; height: number; }) => void;
 }
 
-const Canvas: React.FC<CanvasProps> = ({ nodes, onNodeMove, onNodeAdd, onNodeContentUpdate, onNodeEditingChange, onNodeRegenerate }) => {
+const Canvas: React.FC<CanvasProps> = ({ nodes, onNodeMove, onNodeAdd, onNodeContentUpdate, onNodeEditingChange, onNodeRegenerate, onNodeSizeChange }) => {
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
   const [isPanning, setIsPanning] = useState(false);
   const lastMousePos = useRef<Position>({ x: 0, y: 0 });
@@ -70,23 +69,23 @@ const Canvas: React.FC<CanvasProps> = ({ nodes, onNodeMove, onNodeAdd, onNodeCon
   }, [isPanning, handleMouseMove, handleMouseUp]);
   
   const getEdgePoint = (node: NodeData, parent: NodeData): Position => {
-    const sourceX = parent.position.x + NODE_WIDTH / 2;
-    const sourceY = parent.position.y + NODE_HEIGHT / 2;
-    const targetX = node.position.x + NODE_WIDTH / 2;
-    const targetY = node.position.y + NODE_HEIGHT / 2;
+    const sourceX = parent.position.x + parent.width / 2;
+    const sourceY = parent.position.y + parent.height / 2;
+    const targetX = node.position.x + node.width / 2;
+    const targetY = node.position.y + node.height / 2;
 
     const dx = targetX - sourceX;
     const dy = targetY - sourceY;
 
     if (Math.abs(dx) > Math.abs(dy)) {
         return {
-            x: node.position.x + (dx > 0 ? 0 : NODE_WIDTH),
-            y: node.position.y + NODE_HEIGHT / 2
+            x: node.position.x + (dx > 0 ? 0 : node.width),
+            y: node.position.y + node.height / 2
         };
     } else {
         return {
-            x: node.position.x + NODE_WIDTH / 2,
-            y: node.position.y + (dy > 0 ? 0 : NODE_HEIGHT)
+            x: node.position.x + node.width / 2,
+            y: node.position.y + (dy > 0 ? 0 : node.height)
         };
     }
   }
@@ -134,6 +133,7 @@ const Canvas: React.FC<CanvasProps> = ({ nodes, onNodeMove, onNodeAdd, onNodeCon
             onContentUpdate={onNodeContentUpdate}
             onEditingChange={onNodeEditingChange}
             onRegenerate={onNodeRegenerate}
+            onNodeSizeChange={onNodeSizeChange}
           />
         ))}
       </div>

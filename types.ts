@@ -1,4 +1,3 @@
-
 export interface Position {
   x: number;
   y: number;
@@ -34,4 +33,6 @@ export interface NodeData {
   isEditing: boolean;
   isLoading: boolean;
   availableActions: ActionType[];
+  width: number;
+  height: number;
 }
