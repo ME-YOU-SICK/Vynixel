@@ -3,6 +3,13 @@ export interface Position {
   y: number;
 }
 
+export type NodeContentItem = {
+  type: 'heading' | 'bullet' | 'paragraph';
+  content: string;
+};
+
+export type NodeContent = NodeContentItem[];
+
 export enum ActionType {
   EXPAND_IDEA = 'Expand or Refine Idea',
   VALIDATE_IDEA = 'Validate Idea',
@@ -27,7 +34,7 @@ export enum ActionType {
 export interface NodeData {
   id: string;
   title: string;
-  content: string;
+  content: string | NodeContent;
   position: Position;
   parentId: string | null;
   isEditing: boolean;

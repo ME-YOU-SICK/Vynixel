@@ -15,6 +15,7 @@ interface CanvasProps {
 const Canvas: React.FC<CanvasProps> = ({ nodes, onNodeMove, onNodeAdd, onNodeContentUpdate, onNodeEditingChange, onNodeRegenerate, onNodeSizeChange }) => {
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
   const [isPanning, setIsPanning] = useState(false);
+  const [isZoomingWithKey, setIsZoomingWithKey] = useState(false);
   const lastMousePos = useRef<Position>({ x: 0, y: 0 });
   const canvasRef = useRef<HTMLDivElement>(null);
 
@@ -40,56 +41,87 @@ const Canvas: React.FC<CanvasProps> = ({ nodes, onNodeMove, onNodeAdd, onNodeCon
 
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
-    const scaleAmount = -e.deltaY * 0.001;
-    const newScale = Math.min(Math.max(0.2, transform.scale + scaleAmount), 2);
-    
-    if (canvasRef.current) {
-        const rect = canvasRef.current.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
+    if (isZoomingWithKey) {
+        const scaleAmount = -e.deltaY * 0.001;
+        const newScale = Math.min(Math.max(0.2, transform.scale + scaleAmount), 2);
         
-        const newX = transform.x - mouseX * (newScale / transform.scale - 1);
-        const newY = transform.y - mouseY * (newScale / transform.scale - 1);
-        
-        setTransform({ x: newX, y: newY, scale: newScale });
+        if (canvasRef.current) {
+            const rect = canvasRef.current.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            
+            const newX = transform.x - mouseX * (newScale / transform.scale - 1);
+            const newY = transform.y - mouseY * (newScale / transform.scale - 1);
+            
+            setTransform({ x: newX, y: newY, scale: newScale });
+        }
+    } else {
+        // Pan with scroll wheel
+        setTransform(prev => ({ ...prev, x: prev.x - e.deltaX, y: prev.y - e.deltaY }));
     }
   };
 
   useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key.toLowerCase() === 'z') setIsZoomingWithKey(true);
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+        if (e.key.toLowerCase() === 'z') setIsZoomingWithKey(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    
     if (isPanning) {
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
       window.addEventListener('mouseleave', handleMouseUp);
     }
     return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
       window.removeEventListener('mouseleave', handleMouseUp);
     };
   }, [isPanning, handleMouseMove, handleMouseUp]);
   
-  const getEdgePoint = (node: NodeData, parent: NodeData): Position => {
-    const sourceX = parent.position.x + parent.width / 2;
-    const sourceY = parent.position.y + parent.height / 2;
-    const targetX = node.position.x + node.width / 2;
-    const targetY = node.position.y + node.height / 2;
+  const getEdgePoint = (sourceNode: NodeData, targetNode: NodeData): Position => {
+    const s = {
+        x: sourceNode.position.x,
+        y: sourceNode.position.y,
+        w: sourceNode.width,
+        h: sourceNode.height
+    };
+    const t = {
+        x: targetNode.position.x,
+        y: targetNode.position.y,
+        w: targetNode.width,
+        h: targetNode.height
+    };
 
-    const dx = targetX - sourceX;
-    const dy = targetY - sourceY;
+    const sCenter = { x: s.x + s.w / 2, y: s.y + s.h / 2 };
+    const tCenter = { x: t.x + t.w / 2, y: t.y + t.h / 2 };
+    
+    const dx = tCenter.x - sCenter.x;
+    const dy = tCenter.y - sCenter.y;
+    
+    if (dx === 0 && dy === 0) return { x: sCenter.x, y: sCenter.y };
 
-    if (Math.abs(dx) > Math.abs(dy)) {
-        return {
-            x: node.position.x + (dx > 0 ? 0 : node.width),
-            y: node.position.y + node.height / 2
-        };
-    } else {
-        return {
-            x: node.position.x + node.width / 2,
-            y: node.position.y + (dy > 0 ? 0 : node.height)
-        };
+    const sRatio = s.h / s.w;
+    const angleRatio = Math.abs(dy / dx);
+
+    let x, y;
+
+    if (angleRatio < sRatio) { // Intersects with left or right side
+        x = dx > 0 ? s.x + s.w : s.x;
+        y = sCenter.y + (x - sCenter.x) * (dy/dx);
+    } else { // Intersects with top or bottom side
+        y = dy > 0 ? s.y + s.h : s.y;
+        x = sCenter.x + (y - sCenter.y) * (dx/dy);
     }
-  }
 
+    return { x, y };
+}
 
   return (
     <div
@@ -104,11 +136,10 @@ const Canvas: React.FC<CanvasProps> = ({ nodes, onNodeMove, onNodeAdd, onNodeCon
       onWheel={handleWheel}
     >
       <div
-        className="transform-origin-top-left"
+        className="relative w-full h-full"
         style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})` }}
       >
-        <svg className="absolute top-0 left-0 w-full h-full" style={{ width: '100vw', height: '100vh', pointerEvents: 'none', transform: `scale(${1/transform.scale}) translate(${-transform.x}px, ${-transform.y}px)` }}>
-            <g style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})` }}>
+        <svg className="absolute top-0 left-0" style={{ width: '1px', height: '1px', overflow: 'visible', pointerEvents: 'none' }}>
               {Array.from(nodes.values()).map(node => {
                 if (!node.parentId) return null;
                 const parentNode = nodes.get(node.parentId);
@@ -121,7 +152,6 @@ const Canvas: React.FC<CanvasProps> = ({ nodes, onNodeMove, onNodeAdd, onNodeCon
 
                 return <path key={`${node.parentId}-${node.id}`} d={d} stroke="#4A5568" strokeWidth="2" fill="none" />;
               })}
-            </g>
         </svg>
 
         {Array.from(nodes.values()).map(node => (

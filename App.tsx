@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { NodeData, Position, ActionType } from './types';
+import { NodeData, Position, ActionType, NodeContent } from './types';
 import { generateNodeContent } from './services/geminiService';
 import Canvas from './components/Canvas';
 import Header from './components/Header';
@@ -39,7 +39,11 @@ const App: React.FC = () => {
       const newNodes = new Map(prevNodes);
       const node = newNodes.get(id);
       if (node) {
-        newNodes.set(id, { ...node, content, isEditing: false });
+        const structuredContent: NodeContent = content.split('\n')
+          .filter(line => line.trim() !== '')
+          .map(line => ({ type: 'bullet', content: line.replace(/^- /, '') }));
+
+        newNodes.set(id, { ...node, content: structuredContent.length > 0 ? structuredContent : content, isEditing: false });
       }
       return newNodes;
     });
@@ -71,6 +75,11 @@ const App: React.FC = () => {
   const addNode = useCallback(async (parentId: string, action: ActionType, relativePosition: Position) => {
     const parentNode = nodes.get(parentId);
     if (!parentNode) return;
+    
+    // Convert parent content to string if it's structured
+    const parentContentString = typeof parentNode.content === 'string' 
+        ? parentNode.content 
+        : parentNode.content.map(item => item.content).join('\n');
 
     const newNodeId = `node_${Date.now()}`;
     const newNode: NodeData = {
@@ -92,7 +101,7 @@ const App: React.FC = () => {
     setNodes(prevNodes => new Map(prevNodes).set(newNodeId, newNode));
 
     try {
-      const content = await generateNodeContent(parentNode.content, action);
+      const content = await generateNodeContent(parentContentString, action);
       setNodes(prevNodes => {
         const newNodes = new Map(prevNodes);
         const node = newNodes.get(newNodeId);
@@ -107,7 +116,8 @@ const App: React.FC = () => {
         const newNodes = new Map(prevNodes);
         const node = newNodes.get(newNodeId);
         if (node) {
-            newNodes.set(newNodeId, { ...node, content: 'Error generating content. Please try again.', isLoading: false });
+            const errorContent: NodeContent = [{ type: 'heading', content: 'Error'}, { type: 'paragraph', content: 'Failed to generate content. Please try again.' }];
+            newNodes.set(newNodeId, { ...node, content: errorContent, isLoading: false });
         }
         return newNodes;
       });
@@ -121,6 +131,10 @@ const App: React.FC = () => {
     const parentNode = nodes.get(nodeToRegenerate.parentId);
     if(!parentNode) return;
 
+    const parentContentString = typeof parentNode.content === 'string' 
+        ? parentNode.content 
+        : parentNode.content.map(item => item.content).join('\n');
+
     setNodes(prevNodes => {
         const newNodes = new Map(prevNodes);
         const node = newNodes.get(nodeId);
@@ -131,7 +145,7 @@ const App: React.FC = () => {
     });
 
     try {
-        const content = await generateNodeContent(parentNode.content, nodeToRegenerate.title as ActionType);
+        const content = await generateNodeContent(parentContentString, nodeToRegenerate.title as ActionType);
         setNodes(prevNodes => {
             const newNodes = new Map(prevNodes);
             const node = newNodes.get(nodeId);
@@ -146,7 +160,8 @@ const App: React.FC = () => {
             const newNodes = new Map(prevNodes);
             const node = newNodes.get(nodeId);
             if(node) {
-                newNodes.set(nodeId, {...node, content: 'Error regenerating content. Please try again.', isLoading: false});
+                const errorContent: NodeContent = [{ type: 'heading', content: 'Error'}, { type: 'paragraph', content: 'Failed to regenerate content. Please try again.' }];
+                newNodes.set(nodeId, {...node, content: errorContent, isLoading: false});
             }
             return newNodes;
         })
